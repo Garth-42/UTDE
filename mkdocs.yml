@@ -1,7 +1,7 @@
 site_name: UTDE — Universal Toolpath Design Environment
 site_description: A process-agnostic, programmable platform for multi-axis toolpath generation
 site_author: UTDE Contributors
-repo_url: https://github.com/utde/utde
+repo_url: https://github.com/Garth-42/UTDE
 
 theme:
   name: material
