@@ -1,0 +1,4 @@
+mkdocs>=1.5
+mkdocs-material>=9.0
+mkdocstrings[python]>=0.24
+-e ./utde_v0.1.0

@@ -1,0 +1,1882 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A process-agnostic, programmable platform for multi-axis toolpath generation">
+      
+      
+        <meta name="author" content="UTDE Contributors">
+      
+      
+      
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Node Graph JSON Schema - UTDE — Universal Toolpath Design Environment</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#node-graph-json-schema" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="UTDE — Universal Toolpath Design Environment" class="md-header__button md-logo" aria-label="UTDE — Universal Toolpath Design Environment" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            UTDE — Universal Toolpath Design Environment
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Node Graph JSON Schema
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Garth-42/UTDE" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../getting-started/" class="md-tabs__link">
+        
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../concepts/" class="md-tabs__link">
+        
+  
+    
+  
+  Concepts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../guides/geometry/" class="md-tabs__link">
+          
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../examples/5axis-ded/" class="md-tabs__link">
+          
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../ui/" class="md-tabs__link">
+          
+  
+  UI Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../contributing/development/" class="md-tabs__link">
+          
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../api/" class="md-tabs__link">
+          
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="UTDE — Universal Toolpath Design Environment" class="md-nav__button md-logo" aria-label="UTDE — Universal Toolpath Design Environment" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    UTDE — Universal Toolpath Design Environment
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Garth-42/UTDE" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Concepts
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Guides
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/geometry/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Geometry
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/strategies/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Strategies
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/orientation/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Orientation Rules
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/machines/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Machines & Kinematics
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/gcode-output/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    G-code Output
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/5axis-ded/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    5-Axis DED Welding
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    UI Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            UI Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui/step-import/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    STEP Import
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui/geometry-browser/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Geometry Browser
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui/strategy-panel/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Strategy Panel
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui/toolpath-viewer/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Toolpath Viewer
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui/code-panel/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Code Panel
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Contributing
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Contributing
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/development/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Development Guide
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/tauri-migration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tauri Migration Plan
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/primitives/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    core.primitives
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/toolpath/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    core.toolpath
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/geometry/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    core.geometry
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/orient/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    orient.rules
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/strategies/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    strategies
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/machine/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    kinematics.machine
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/post/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    post.processor
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ui-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      UI layout
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#guiding-constraints" class="md-nav__link">
+    <span class="md-ellipsis">
+      Guiding constraints
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connection-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection model
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#state-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      State architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="State architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sidebar-selector-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sidebar selector contract
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#graph-topology" class="md-nav__link">
+    <span class="md-ellipsis">
+      Graph topology
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#top-level-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Top-level structure
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#node-object" class="md-nav__link">
+    <span class="md-ellipsis">
+      Node object
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#edge-object" class="md-nav__link">
+    <span class="md-ellipsis">
+      Edge object
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#primitive-types-on-ports" class="md-nav__link">
+    <span class="md-ellipsis">
+      Primitive types on ports
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-in-node-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Built-in node types
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Built-in node types">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#geometry-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Geometry nodes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#strategy-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Strategy nodes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#orientation-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Orientation nodes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Output nodes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-script-round-trip" class="md-nav__link">
+    <span class="md-ellipsis">
+      Python script round-trip
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      Implementation target
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="node-graph-json-schema">Node Graph JSON Schema<a class="headerlink" href="#node-graph-json-schema" title="Permanent link">&para;</a></h1>
+<p>This document defines the JSON serialization format for the UTDE visual node graph.
+Every node corresponds to exactly one Python API call. The graph round-trips losslessly
+to/from a Python script — this is the contract that keeps the two views in sync.</p>
+<h2 id="ui-layout">UI layout<a class="headerlink" href="#ui-layout" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────────────────────────┬──────────────────────┐
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│                                     │                      │
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│         Node graph canvas           │  Inspector panel     │
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│                                     │                      │
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│  [Geometry]──[Strategy]──[Orient]   │  (nothing selected)  │
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│                        ╲            │  → process-level     │
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│                    [Orient]──[Post] │    Variable params   │
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│                                     │                      │
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│                                     │  (node selected)     │
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│                                     │  → that node&#39;s       │
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>│                                     │    param fields      │
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>│                                     │                      │
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>└─────────────────────────────────────┴──────────────────────┘
+</code></pre></div>
+<p><strong>Inspector panel behaviour:</strong>
+- <strong>No node selected</strong> → shows all <code>Variable</code> instances for the process (the <code>params</code> dict
+  from the <code>@process</code> decorator). These are the knobs a user configures when loading a
+  template: <code>wire_feed</code>, <code>layer_height</code>, <code>lead_angle</code>, etc.
+- <strong>Node selected</strong> → shows that node's <code>params</code> fields as editable inputs. Selecting a
+  different node switches the panel instantly. Deselecting returns to process params.</p>
+<p><code>Variable</code> instances are <strong>not canvas nodes</strong> — they live only in the inspector panel.
+<code>Position</code> and <code>Frame</code> instances are canvas nodes with output ports (they are reused
+across multiple flow nodes and their wiring relationships are worth showing).</p>
+<h2 id="guiding-constraints">Guiding constraints<a class="headerlink" href="#guiding-constraints" title="Permanent link">&para;</a></h2>
+<p><strong>One node = one API call.</strong> If a visual operation can't be expressed as a single
+call to the public <code>toolpath_engine</code> API, the API is missing something. Fix the API
+before adding the visual node.</p>
+<h2 id="connection-model">Connection model<a class="headerlink" href="#connection-model" title="Permanent link">&para;</a></h2>
+<p>Inspired by Grasshopper: <strong>any port can connect to any other port — nothing is blocked
+at the wire level.</strong> Type information on ports is metadata, not a constraint.</p>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Wire appearance</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Same type on both ends</td>
+<td>Solid wire</td>
+<td>Runs normally</td>
+</tr>
+<tr>
+<td>Different types</td>
+<td>Dashed wire</td>
+<td>Python attempts coercion at execution time</td>
+</tr>
+<tr>
+<td>Execution failed at this input</td>
+<td>Node border turns red + error message on node</td>
+<td>Wire stays intact</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Errors live on nodes, not on wires.</strong> The node that couldn't handle its input
+turns red and shows the Python exception. The user can see <em>what broke</em>, not just
+<em>where they connected</em>.</p>
+<p>This model requires zero client-side type validation in v1. Port <code>type</code> strings drive
+only the wire appearance (string equality check: same → solid, different → dashed).
+Server-side type enforcement can be added later without changing the schema.</p>
+<h2 id="state-architecture">State architecture<a class="headerlink" href="#state-architecture" title="Permanent link">&para;</a></h2>
+<p><strong><code>graphStore</code> is the single source of truth.</strong> The sidebar is a derived view of it,
+not a parallel state model. This avoids the "two drifting representations" problem.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>graphStore (Zustand)
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    │
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    ├── Node graph canvas — renders full graph, spatial layout
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    │
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    └── Sidebar (StrategyPanel, OrientPanel, etc.)
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>            reads/writes via selectors:
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>            - getStrategyNode(graph)   → strategy type + params for sidebar fields
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>            - getOrientNodes(graph)    → ordered orient rules for the rules list
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>            - updateNodeParam(graph, nodeId, key, value)
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>            - addOrientNode(graph, ruleType, params)
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>            - removeNode(graph, nodeId)
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>            - moveOrientNode(graph, nodeId, direction)
+</code></pre></div>
+<p><strong>Migration path:</strong> <code>strategyStore</code> stays unchanged until node graph canvas work begins
+(TODO #10). At that point it is replaced by <code>graphStore</code>. The sidebar selectors above
+are the migration shim — they keep all sidebar behaviour identical from the user's
+perspective while the underlying state model changes.</p>
+<p><strong>Do not add new state to <code>strategyStore</code></strong> after this decision. New pipeline parameters
+should be designed as graph node params from the start, even if the graph canvas doesn't
+exist yet. The sidebar can expose them as plain fields; they'll map cleanly to nodes later.</p>
+<h3 id="sidebar-selector-contract">Sidebar selector contract<a class="headerlink" href="#sidebar-selector-contract" title="Permanent link">&para;</a></h3>
+<p>These three selectors are the only interface between the sidebar and the graph store.
+All sidebar components must go through them — no direct graph JSON manipulation in UI code.</p>
+<table>
+<thead>
+<tr>
+<th>Selector</th>
+<th>Returns</th>
+<th>Used by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getStrategyNode(graph)</code></td>
+<td><code>{ type, params }</code></td>
+<td>StrategyPanel dropdowns + fields</td>
+</tr>
+<tr>
+<td><code>getOrientNodes(graph)</code></td>
+<td><code>[{ id, type, params }]</code> in order</td>
+<td>Orient rules list</td>
+</tr>
+<tr>
+<td><code>getPostNode(graph)</code></td>
+<td><code>{ type, params }</code></td>
+<td>Output/G-code panel</td>
+</tr>
+</tbody>
+</table>
+<p>All mutations go through <code>updateNodeParam(nodeId, key, value)</code> and the add/remove/move
+node actions — never by directly patching the graph JSON.</p>
+<h2 id="graph-topology">Graph topology<a class="headerlink" href="#graph-topology" title="Permanent link">&para;</a></h2>
+<p>The graph is a <strong>DAG (directed acyclic graph)</strong>. Edges are explicit objects — there is
+no implicit ordering from node position. The runner executes nodes in topological order
+(Kahn's algorithm): a node runs only after all nodes feeding its inputs have completed.</p>
+<p>This supports branching from day one:
+- One strategy node feeding two post-processor nodes (Fanuc output + debug output simultaneously)
+- Two strategy nodes merging into one orient node (combined toolpath collection)
+- Any future composition that would be impossible in a linear chain</p>
+<p>Cycles are invalid. The graph store must reject any edge addition that would create a cycle.
+Detection: after adding a candidate edge, run a DFS from the target node — if the source
+node is reachable, the edge is cyclic and must be rejected.</p>
+<h2 id="top-level-structure">Top-level structure<a class="headerlink" href="#top-level-structure" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">&quot;utde_graph_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">&quot;nodes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="err">...</span><span class="kc">n</span><span class="err">ode</span><span class="w"> </span><span class="err">objec</span><span class="kc">ts</span><span class="err">...</span><span class="w"> </span><span class="p">],</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">&quot;edges&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="err">...edge</span><span class="w"> </span><span class="err">objec</span><span class="kc">ts</span><span class="err">...</span><span class="w"> </span><span class="p">],</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">&quot;metadata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my-process&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="nt">&quot;created&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-03-01T00:00:00Z&quot;</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="p">}</span>
+</code></pre></div>
+<hr />
+<h2 id="node-object">Node object<a class="headerlink" href="#node-object" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;node_001&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;FollowCurveStrategy&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Follow Curve&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">&quot;position&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">200</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span><span class="nt">&quot;params&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">    </span><span class="nt">&quot;feed_rate&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1500</span><span class="p">,</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">    </span><span class="nt">&quot;path_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cut&quot;</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">  </span><span class="nt">&quot;input_ports&quot;</span><span class="p">:</span><span class="w">  </span><span class="p">[</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;curve_in&quot;</span><span class="p">,</span><span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Curve&quot;</span><span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="p">],</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span><span class="nt">&quot;output_ports&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tp_out&quot;</span><span class="p">,</span><span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Toolpath&quot;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">],</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;idle&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">  </span><span class="nt">&quot;output&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="p">}</span>
+</code></pre></div>
+<p><code>status</code> values: <code>"idle"</code> | <code>"running"</code> | <code>"complete"</code> | <code>"error"</code></p>
+<p><code>output</code> holds the serialized result of the node's last execution, or <code>null</code> if it
+hasn't run. In v1 (on-demand execution) these fields are always <code>"idle"</code> and <code>null</code>
+respectively — they exist so the reactive upgrade requires no schema migration.</p>
+<p><strong>Reactive upgrade path (future):</strong> wrap the graph runner in a <code>useEffect</code> + debounce
+on <code>graphStore</code> changes. The runner populates <code>status</code> and <code>output</code> per node and only
+re-executes nodes downstream of whatever changed. No schema changes needed.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>Unique string within the graph</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td>Maps 1:1 to a Python class or function name in <code>toolpath_engine</code></td>
+</tr>
+<tr>
+<td><code>label</code></td>
+<td>Display name in the UI (editable, does not affect serialization)</td>
+</tr>
+<tr>
+<td><code>position</code></td>
+<td>Canvas position — UI state only, not part of Python script</td>
+</tr>
+<tr>
+<td><code>params</code></td>
+<td>Keyword arguments passed to the Python constructor/call</td>
+</tr>
+<tr>
+<td><code>input_ports</code></td>
+<td>List of typed input ports</td>
+</tr>
+<tr>
+<td><code>output_ports</code></td>
+<td>List of typed output ports</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="edge-object">Edge object<a class="headerlink" href="#edge-object" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;edge_001&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">&quot;from_node&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;node_001&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">&quot;from_port&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tp_out&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nt">&quot;to_node&quot;</span><span class="p">:</span><span class="w">   </span><span class="s2">&quot;node_002&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="nt">&quot;to_port&quot;</span><span class="p">:</span><span class="w">   </span><span class="s2">&quot;toolpath_in&quot;</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">}</span>
+</code></pre></div>
+<p>Edges are directed: data flows from <code>from_node</code> → <code>to_node</code>. A single output port can
+fan out to multiple downstream nodes (one strategy → two post-processors). A single
+input port can receive from multiple upstream nodes only if the port type supports
+collection merging (e.g. <code>Toolpath</code> inputs on an orient node accept multiple toolpaths
+and concatenate them).</p>
+<p><strong>Cycle prevention</strong> is enforced on every <code>addEdge</code> call via DFS. The store action
+returns <code>{ ok: false, reason: "cycle" }</code> if the edge would create a cycle; the UI
+shows an error on the wire and does not commit the edge.</p>
+<hr />
+<h2 id="primitive-types-on-ports">Primitive types on ports<a class="headerlink" href="#primitive-types-on-ports" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Type name</th>
+<th>Python type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Position</code></td>
+<td><code>Position</code></td>
+<td>Named XYZ point</td>
+</tr>
+<tr>
+<td><code>Orientation</code></td>
+<td><code>Orientation</code></td>
+<td>Direction vector / rotation</td>
+</tr>
+<tr>
+<td><code>Frame</code></td>
+<td><code>Frame</code></td>
+<td>Named coordinate system</td>
+</tr>
+<tr>
+<td><code>Curve</code></td>
+<td><code>Curve</code></td>
+<td>3D path</td>
+</tr>
+<tr>
+<td><code>Surface</code></td>
+<td><code>Surface</code></td>
+<td>CAD face or region</td>
+</tr>
+<tr>
+<td><code>Toolpath</code></td>
+<td><code>ToolpathCollection</code></td>
+<td>Oriented, parameterized path</td>
+</tr>
+<tr>
+<td><code>Variable</code></td>
+<td><code>Variable</code></td>
+<td>Named scalar/string/bool</td>
+</tr>
+<tr>
+<td><code>OrientRule</code></td>
+<td>callable orient rule</td>
+<td>Composable orientation strategy</td>
+</tr>
+<tr>
+<td><code>GCode</code></td>
+<td><code>str</code></td>
+<td>Post-processed G-code output</td>
+</tr>
+</tbody>
+</table>
+<p>Connections between mismatched types are rejected. This makes the graph self-documenting.</p>
+<hr />
+<h2 id="built-in-node-types">Built-in node types<a class="headerlink" href="#built-in-node-types" title="Permanent link">&para;</a></h2>
+<h3 id="geometry-nodes">Geometry nodes<a class="headerlink" href="#geometry-nodes" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Node type</th>
+<th>Python equivalent</th>
+<th>Inputs</th>
+<th>Outputs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GeometryModel</code></td>
+<td><code>GeometryModel.load(path)</code></td>
+<td>—</td>
+<td><code>Surface[]</code>, <code>Curve[]</code></td>
+</tr>
+<tr>
+<td><code>SelectSurfaces</code></td>
+<td><code>model.select(tag=...)</code></td>
+<td><code>Surface[]</code></td>
+<td><code>Surface[]</code></td>
+</tr>
+<tr>
+<td><code>SelectEdges</code></td>
+<td><code>model.select_edges(type=...)</code></td>
+<td><code>Surface[]</code></td>
+<td><code>Curve[]</code></td>
+</tr>
+<tr>
+<td><code>OffsetCurve</code></td>
+<td><code>curve.offset(dist)</code></td>
+<td><code>Curve</code></td>
+<td><code>Curve</code></td>
+</tr>
+<tr>
+<td><code>ProjectCurve</code></td>
+<td><code>curve.project_onto(surface)</code></td>
+<td><code>Curve</code>, <code>Surface</code></td>
+<td><code>Curve</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="strategy-nodes">Strategy nodes<a class="headerlink" href="#strategy-nodes" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Node type</th>
+<th>Python equivalent</th>
+<th>Inputs</th>
+<th>Outputs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FollowCurveStrategy</code></td>
+<td><code>FollowCurveStrategy().generate(curve)</code></td>
+<td><code>Curve</code></td>
+<td><code>Toolpath</code></td>
+</tr>
+<tr>
+<td><code>RasterFillStrategy</code></td>
+<td><code>RasterFillStrategy().generate(surface)</code></td>
+<td><code>Surface</code></td>
+<td><code>Toolpath</code></td>
+</tr>
+<tr>
+<td><code>ContourParallelStrategy</code></td>
+<td><code>ContourParallelStrategy().generate(surface)</code></td>
+<td><code>Surface</code></td>
+<td><code>Toolpath</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="orientation-nodes">Orientation nodes<a class="headerlink" href="#orientation-nodes" title="Permanent link">&para;</a></h3>
+<p>Each orient node takes a <code>Toolpath</code> input and produces a <code>Toolpath</code> output
+(the same collection with orientation updated). They chain in sequence.</p>
+<table>
+<thead>
+<tr>
+<th>Node type</th>
+<th>Python equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>OrientToNormal</code></td>
+<td><code>collection.orient(to_normal(surface))</code></td>
+</tr>
+<tr>
+<td><code>OrientFixed</code></td>
+<td><code>collection.orient(fixed(direction))</code></td>
+</tr>
+<tr>
+<td><code>OrientLead</code></td>
+<td><code>collection.orient(lead(angle_deg))</code></td>
+</tr>
+<tr>
+<td><code>OrientLag</code></td>
+<td><code>collection.orient(lag(angle_deg))</code></td>
+</tr>
+<tr>
+<td><code>OrientSideTilt</code></td>
+<td><code>collection.orient(side_tilt(angle_deg))</code></td>
+</tr>
+<tr>
+<td><code>OrientAvoidCollision</code></td>
+<td><code>collection.orient(avoid_collision(max_tilt_deg=45))</code></td>
+</tr>
+<tr>
+<td><code>OrientBlend</code></td>
+<td><code>collection.orient(blend(rule_a, rule_b, t))</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="output-nodes">Output nodes<a class="headerlink" href="#output-nodes" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Node type</th>
+<th>Python equivalent</th>
+<th>Inputs</th>
+<th>Outputs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PostProcessor</code></td>
+<td><code>PostProcessor(config).generate(collection, machine)</code></td>
+<td><code>Toolpath</code></td>
+<td><code>GCode</code></td>
+</tr>
+<tr>
+<td><code>DebugOutput</code></td>
+<td><code>DebugPostProcessor().generate(collection)</code></td>
+<td><code>Toolpath</code></td>
+<td><code>GCode</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="python-script-round-trip">Python script round-trip<a class="headerlink" href="#python-script-round-trip" title="Permanent link">&para;</a></h2>
+<p>A graph serializes to a Python script by traversing nodes in topological order
+and emitting one line per node, using the node <code>id</code> as the variable name:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Serialized from graph</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">node_001</span> <span class="o">=</span> <span class="n">Curve</span><span class="o">.</span><span class="n">helix</span><span class="p">(</span><span class="n">center</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">),</span> <span class="n">radius</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">pitch</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">turns</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">node_002</span> <span class="o">=</span> <span class="n">FollowCurveStrategy</span><span class="p">(</span><span class="n">feed_rate</span><span class="o">=</span><span class="mi">1500</span><span class="p">)</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">node_001</span><span class="p">)</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">node_003</span> <span class="o">=</span> <span class="n">node_002</span><span class="o">.</span><span class="n">orient</span><span class="p">(</span><span class="n">to_normal</span><span class="p">(</span><span class="n">node_004</span><span class="p">))</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">node_004</span> <span class="o">=</span> <span class="n">Surface</span><span class="o">.</span><span class="n">cylinder</span><span class="p">(</span><span class="n">center</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="n">radius</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">node_005</span> <span class="o">=</span> <span class="n">PostProcessor</span><span class="p">(</span><span class="n">PostConfig</span><span class="p">(</span><span class="n">machine_name</span><span class="o">=</span><span class="s2">&quot;5axis_AC&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">node_003</span><span class="p">)</span>
+</code></pre></div>
+<p>The inverse (script → graph) parses assignments and call expressions,
+inferring port types from the <code>toolpath_engine</code> type annotations.</p>
+<hr />
+<h2 id="implementation-target">Implementation target<a class="headerlink" href="#implementation-target" title="Permanent link">&para;</a></h2>
+<p>The frontend node graph editor is implemented with <strong>litegraph.js</strong>.
+Node type definitions in <code>utde-app/src/nodegraph/</code> must mirror this schema exactly.
+The backend <code>/serialize-graph</code> and <code>/deserialize-graph</code> API endpoints perform
+the JSON ↔ Python script conversion.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "content.code.copy"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>
