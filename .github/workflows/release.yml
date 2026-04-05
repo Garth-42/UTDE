@@ -1,0 +1,89 @@
+name: Release
+
+# Creates a GitHub Release with signed native installers for all platforms.
+# Triggered by pushing a version tag (e.g. v0.2.0).
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-sidecar:
+    # Re-run sidecar builds so release artifacts are always fresh
+    uses: ./.github/workflows/build-sidecar.yml
+
+  release:
+    needs: build-sidecar
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            triple: x86_64-pc-windows-msvc
+          - os: macos-latest
+            triple: x86_64-apple-darwin
+          - os: macos-latest
+            triple: aarch64-apple-darwin
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend deps
+        working-directory: utde-app
+        run: npm ci
+
+      # Download the pre-built sidecar for this platform
+      - name: Download sidecar artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sidecar-${{ matrix.triple }}
+          path: utde-app/src-tauri/binaries/
+
+      - name: Make sidecar executable (Unix)
+        if: runner.os != 'Windows'
+        run: chmod +x utde-app/src-tauri/binaries/utde-server-${{ matrix.triple }}
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS code signing
+          APPLE_CERTIFICATE:            ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD:   ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY:       ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:                     ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:               ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:                ${{ secrets.APPLE_TEAM_ID }}
+          # Windows code signing
+          TAURI_SIGNING_PRIVATE_KEY:    ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: utde-app
+          tagName: ${{ github.ref_name }}
+          releaseName: "UTDE ${{ github.ref_name }}"
+          releaseBody: |
+            See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          releaseDraft: true
+          prerelease: false

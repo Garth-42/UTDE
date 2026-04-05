@@ -1,0 +1,67 @@
+# Generic 6-DOF Robot Arm
+# ========================
+# All-rotary kinematic chain (tool side only).
+# Joint axes follow a standard elbow-type robot configuration.
+# Adapt joint axes and limits to match your specific robot's DH parameters.
+#
+# Load with:
+#   from toolpath_engine import Machine
+#   with open("machines/generic_6dof_robot.yaml") as f:
+#       machine = Machine.from_yaml(f.read())
+#
+# For robots with published Denavit-Hartenberg parameters, use those d, a, alpha
+# values to compute the equivalent axis vectors for each joint.
+
+name: generic_6dof_robot
+
+tool_chain:
+  - name: J1
+    type: rotary
+    axis: [0, 0, 1]         # base rotation (vertical axis)
+    limits: [-170, 170]
+    home: 0
+  - name: J2
+    type: rotary
+    axis: [0, 1, 0]         # shoulder (horizontal axis)
+    limits: [-65, 85]
+    home: 0
+  - name: J3
+    type: rotary
+    axis: [0, 1, 0]         # elbow
+    limits: [-180, 55]
+    home: 90
+  - name: J4
+    type: rotary
+    axis: [1, 0, 0]         # wrist roll
+    limits: [-185, 185]
+    home: 0
+  - name: J5
+    type: rotary
+    axis: [0, 1, 0]         # wrist pitch
+    limits: [-120, 120]
+    home: 0
+  - name: J6
+    type: rotary
+    axis: [1, 0, 0]         # tool flange rotation
+    limits: [-350, 350]
+    home: 0
+
+workpiece_chain: []         # robot holds the tool; workpiece is fixed
+
+# Tool center point offset from J6 flange (mm)
+tool_offset: [0, 0, 150]
+
+config:
+  post: fanuc
+  wcs_register: G54
+  axis_names:
+    J1: A1
+    J2: A2
+    J3: A3
+    J4: A4
+    J5: A5
+    J6: A6
+  dialect: fanuc
+  rotary_units: degrees
+  # Set to true to also output Cartesian XYZ+IJK alongside joint values
+  output_cartesian: false

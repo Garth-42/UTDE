@@ -1,0 +1,99 @@
+name: Build Python Sidecar
+
+# Builds the PyInstaller bundle on every platform and uploads the binaries
+# as workflow artifacts.  The release workflow downloads these artifacts to
+# place the correct triple-suffixed binary next to the Tauri build.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "step_server.py"
+      - "step_server.spec"
+      - "utde_v0.1.0/**"
+  pull_request:
+    paths:
+      - "step_server.py"
+      - "step_server.spec"
+      - "utde_v0.1.0/**"
+  workflow_dispatch:
+
+jobs:
+  build-sidecar:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+            artifact: utde-server
+          - os: windows-latest
+            triple: x86_64-pc-windows-msvc
+            artifact: utde-server.exe
+          - os: macos-latest
+            triple: x86_64-apple-darwin
+            artifact: utde-server
+          - os: macos-latest
+            triple: aarch64-apple-darwin
+            artifact: utde-server
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # pythonocc-core is only available via conda-forge
+      - name: Set up conda (non-Windows)
+        if: runner.os != 'Windows'
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: "3.12"
+          auto-update-conda: true
+
+      - name: Set up conda (Windows)
+        if: runner.os == 'Windows'
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: "3.12"
+          auto-update-conda: true
+
+      - name: Install pythonocc-core via conda
+        shell: bash -l {0}
+        run: |
+          conda install -c conda-forge pythonocc-core numpy scipy pyyaml -y
+
+      - name: Install remaining Python deps
+        shell: bash -l {0}
+        run: |
+          pip install flask pyinstaller
+          pip install -e utde_v0.1.0/
+
+      - name: Build sidecar with PyInstaller
+        shell: bash -l {0}
+        run: |
+          pyinstaller step_server.spec --distpath dist/
+
+      - name: Rename binary with target triple (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mv dist/utde-server/utde-server \
+             dist/utde-server/utde-server-${{ matrix.triple }}
+
+      - name: Rename binary with target triple (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Move-Item dist/utde-server/utde-server.exe `
+                    dist/utde-server/utde-server-${{ matrix.triple }}.exe
+        shell: pwsh
+
+      - name: Upload sidecar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-${{ matrix.triple }}
+          path: dist/utde-server/utde-server-${{ matrix.triple }}*
+          retention-days: 7

@@ -4,7 +4,41 @@
 *.STEP
 *.STP
 
-
 # Ignore .docx files
 *.docx
 *.DOCX
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+utde-app/dist/
+
+# MkDocs generated site
+site/
+
+# PyInstaller
+dist/
+build/
+*.spec.bak
+
+# Claude Code local settings (may contain secrets/webhooks)
+.claude/
+
+# Environment variables (commit .env.example instead)
+.env
+.env.local
+
+# macOS
+.DS_Store
+
+# Tauri build output
+utde-app/src-tauri/target/
+
+# Local claude history
+history.md

@@ -1,0 +1,83 @@
+site_name: UTDE — Universal Toolpath Design Environment
+site_description: A process-agnostic, programmable platform for multi-axis toolpath generation
+site_author: UTDE Contributors
+repo_url: https://github.com/utde/utde
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [utde_v0.1.0]
+          options:
+            show_source: true
+            show_root_heading: true
+            docstring_style: google
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Concepts: concepts.md
+  - Guides:
+    - Geometry: guides/geometry.md
+    - Strategies: guides/strategies.md
+    - Orientation Rules: guides/orientation.md
+    - Machines & Kinematics: guides/machines.md
+    - G-code Output: guides/gcode-output.md
+  - Examples:
+    - 5-Axis DED Welding: examples/5axis-ded.md
+  - UI Reference:
+    - Overview: ui/index.md
+    - STEP Import: ui/step-import.md
+    - Geometry Browser: ui/geometry-browser.md
+    - Strategy Panel: ui/strategy-panel.md
+    - Toolpath Viewer: ui/toolpath-viewer.md
+    - Code Panel: ui/code-panel.md
+  - Contributing:
+    - Development Guide: contributing/development.md
+    - Tauri Migration Plan: contributing/tauri-migration.md
+  - API Reference:
+    - Overview: api/index.md
+    - core.primitives: api/primitives.md
+    - core.toolpath: api/toolpath.md
+    - core.geometry: api/geometry.md
+    - orient.rules: api/orient.md
+    - strategies: api/strategies.md
+    - kinematics.machine: api/machine.md
+    - post.processor: api/post.md
