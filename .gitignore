@@ -1,0 +1,10 @@
+# Ignore STEP 3D CAD files
+*.step
+*.stp
+*.STEP
+*.STP
+
+
+# Ignore .docx files
+*.docx
+*.DOCX
