@@ -401,8 +401,10 @@ def generate_toolpath():
         selected_edges   = data.get("edges", [])
         strategy_cfg     = data.get("strategy", {})
         orientation_cfg  = data.get("orientation", [])
-        machine_preset   = data.get("machine", "gantry_5axis_ac")
-        workspace_origin = data.get("workspace_origin")  # {x, y, z} or None
+        machine_preset      = data.get("machine", "gantry_5axis_ac")
+        workspace_origin    = data.get("workspace_origin")  # {x, y, z} or None
+        post_processor_type = data.get("post_processor", "default")  # "default" or "debug"
+        debug_format        = data.get("post_processor_format", "text")  # "text" or "json"
 
         # Add UTDE to path
         utde_path = os.path.join(os.path.dirname(__file__), "utde_v0.1.0")
@@ -414,7 +416,7 @@ def generate_toolpath():
         from toolpath_engine.strategies import FollowCurveStrategy, RasterFillStrategy, ContourParallelStrategy
         from toolpath_engine.orient import to_normal, fixed, lead, lag, avoid_collision
         from toolpath_engine.kinematics import Machine
-        from toolpath_engine.post import PostProcessor, PostConfig
+        from toolpath_engine.post import PostProcessor, PostConfig, DebugPostProcessor
 
         # Build geometry objects from params
         surfaces = {}
@@ -571,19 +573,21 @@ def generate_toolpath():
                         pt.position.z - oz,
                     )
 
-        # Machine + G-code
-        machine_factory = getattr(Machine, machine_preset, Machine.gantry_5axis_ac)
-        machine_obj     = machine_factory()
-        post            = PostProcessor(machine_obj)
-
-        # Prepend WCS comment if an origin was set
-        gcode = post.process(paths, resolve_ik=False)
-        if workspace_origin:
-            wcs_comment = (
-                f"( WCS Origin: X{ox:.4f} Y{oy:.4f} Z{oz:.4f} in CAD coordinates )\n"
-                f"( All coordinates below are relative to this origin )\n"
-            )
-            gcode = wcs_comment + gcode
+        # Machine + output
+        if post_processor_type == "debug":
+            post  = DebugPostProcessor(format=debug_format)
+            gcode = post.process(paths)
+        else:
+            machine_factory = getattr(Machine, machine_preset, Machine.gantry_5axis_ac)
+            machine_obj     = machine_factory()
+            post            = PostProcessor(machine_obj)
+            gcode           = post.process(paths, resolve_ik=False)
+            if workspace_origin:
+                wcs_comment = (
+                    f"( WCS Origin: X{ox:.4f} Y{oy:.4f} Z{oz:.4f} in CAD coordinates )\n"
+                    f"( All coordinates below are relative to this origin )\n"
+                )
+                gcode = wcs_comment + gcode
 
         # Serialize toolpath points
         points = []

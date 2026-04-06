@@ -1,11 +1,13 @@
-"""Tests for PostProcessor and PostConfig."""
+"""Tests for PostProcessor, PostConfig, and DebugPostProcessor."""
 
+import json
 import pytest
 
 from toolpath_engine.core.primitives import Vector3, Orientation
 from toolpath_engine.core.toolpath import ToolpathPoint, Toolpath, ToolpathCollection
 from toolpath_engine.kinematics.machine import Machine
 from toolpath_engine.post.processor import PostProcessor, PostConfig
+from toolpath_engine.post.debug import DebugPostProcessor
 
 
 def make_collection(n=3, feed=1000.0) -> ToolpathCollection:
@@ -186,3 +188,184 @@ class TestPostProcessor:
         with open(filepath) as f:
             content = f.read()
         assert "G1" in content
+
+
+# ── DebugPostProcessor ────────────────────────────────────────────────────────
+
+
+def make_debug_collection() -> ToolpathCollection:
+    col = ToolpathCollection(name="debug_job")
+    pts = [
+        ToolpathPoint(
+            position=Vector3(0.0, 0.0, 0.0),
+            orientation=Orientation.z_down(),
+            feed_rate=500.0,
+            source="raster_fill",
+            path_type="cut",
+        ),
+        ToolpathPoint(
+            position=Vector3(10.0, 0.0, 0.0),
+            orientation=Orientation.z_down(),
+            feed_rate=500.0,
+            source="raster_fill",
+            path_type="cut",
+        ),
+        ToolpathPoint(
+            position=Vector3(10.0, 5.0, 0.0),
+            orientation=Orientation.z_down(),
+            feed_rate=500.0,
+            rapid=True,
+            source="raster_fill",
+            path_type="travel",
+        ),
+    ]
+    col.add(Toolpath(pts, name="layer_0"))
+    return col
+
+
+class TestDebugPostProcessor:
+    def test_invalid_format_raises(self):
+        with pytest.raises(ValueError):
+            DebugPostProcessor(format="gcode")
+
+    def test_text_returns_string(self):
+        post = DebugPostProcessor(format="text")
+        out = post.process(make_debug_collection())
+        assert isinstance(out, str)
+        assert len(out) > 0
+
+    def test_text_contains_collection_name(self):
+        post = DebugPostProcessor(format="text")
+        out = post.process(make_debug_collection())
+        assert "debug_job" in out
+
+    def test_text_contains_toolpath_name(self):
+        post = DebugPostProcessor(format="text")
+        out = post.process(make_debug_collection())
+        assert "layer_0" in out
+
+    def test_text_contains_xyz_coordinates(self):
+        post = DebugPostProcessor(format="text")
+        out = post.process(make_debug_collection())
+        assert "X=" in out
+        assert "Y=" in out
+        assert "Z=" in out
+
+    def test_text_contains_ijk_orientation(self):
+        post = DebugPostProcessor(format="text")
+        out = post.process(make_debug_collection())
+        assert "IJK" in out
+
+    def test_text_contains_source_and_path_type(self):
+        post = DebugPostProcessor(format="text")
+        out = post.process(make_debug_collection())
+        assert "raster_fill" in out
+        assert "cut" in out
+
+    def test_text_rapid_flag_shown(self):
+        post = DebugPostProcessor(format="text")
+        out = post.process(make_debug_collection())
+        assert "rapid=Y" in out
+
+    def test_text_feed_rate_shown(self):
+        post = DebugPostProcessor(format="text")
+        out = post.process(make_debug_collection())
+        assert "feed=500" in out
+
+    def test_text_point_indices(self):
+        post = DebugPostProcessor(format="text")
+        out = post.process(make_debug_collection())
+        assert "#0000" in out
+        assert "#0001" in out
+
+    def test_json_returns_valid_json(self):
+        post = DebugPostProcessor(format="json")
+        out = post.process(make_debug_collection())
+        data = json.loads(out)
+        assert data["collection"] == "debug_job"
+        assert data["total_points"] == 3
+
+    def test_json_structure(self):
+        post = DebugPostProcessor(format="json")
+        data = json.loads(post.process(make_debug_collection()))
+        tp = data["toolpaths"][0]
+        assert tp["name"] == "layer_0"
+        pt = tp["points"][0]
+        assert "position" in pt
+        assert "orientation" in pt
+        assert "feed_rate" in pt
+        assert "source" in pt
+        assert "path_type" in pt
+
+    def test_json_position_values(self):
+        post = DebugPostProcessor(format="json")
+        data = json.loads(post.process(make_debug_collection()))
+        pt = data["toolpaths"][0]["points"][1]
+        assert pt["position"]["x"] == pytest.approx(10.0)
+
+    def test_json_rapid_flag(self):
+        post = DebugPostProcessor(format="json")
+        data = json.loads(post.process(make_debug_collection()))
+        pts = data["toolpaths"][0]["points"]
+        assert pts[2]["rapid"] is True
+        assert pts[0]["rapid"] is False
+
+    def test_large_move_warning_text(self):
+        post = DebugPostProcessor(format="text", large_move_threshold=5.0)
+        col = ToolpathCollection("warn_test")
+        pts = [
+            ToolpathPoint(position=Vector3(0, 0, 0), orientation=Orientation.z_down(), feed_rate=100),
+            ToolpathPoint(position=Vector3(200, 0, 0), orientation=Orientation.z_down(), feed_rate=100),
+        ]
+        col.add(Toolpath(pts, name="big_move"))
+        out = post.process(col)
+        assert "WARN: large move" in out
+
+    def test_large_move_warning_json(self):
+        post = DebugPostProcessor(format="json", large_move_threshold=5.0)
+        col = ToolpathCollection("warn_test")
+        pts = [
+            ToolpathPoint(position=Vector3(0, 0, 0), orientation=Orientation.z_down(), feed_rate=100),
+            ToolpathPoint(position=Vector3(200, 0, 0), orientation=Orientation.z_down(), feed_rate=100),
+        ]
+        col.add(Toolpath(pts, name="big_move"))
+        data = json.loads(post.process(col))
+        assert "warnings" in data["toolpaths"][0]["points"][1]
+
+    def test_zero_orientation_warning(self):
+        post = DebugPostProcessor(format="text")
+        col = ToolpathCollection("zero_orient")
+        pt = ToolpathPoint(
+            position=Vector3(0, 0, 0),
+            orientation=Orientation(i=0.0, j=0.0, k=0.0),
+            feed_rate=100,
+        )
+        col.add(Toolpath([pt], name="bad_orient"))
+        out = post.process(col)
+        assert "zero-length orientation" in out
+
+    def test_no_warning_for_normal_move(self):
+        post = DebugPostProcessor(format="text")
+        out = post.process(make_debug_collection())
+        assert "WARN" not in out
+
+    def test_process_params_shown_in_text(self):
+        post = DebugPostProcessor(format="text")
+        col = ToolpathCollection("params_test")
+        pt = ToolpathPoint(
+            position=Vector3(0, 0, 0),
+            orientation=Orientation.z_down(),
+            feed_rate=100,
+            process_params={"power": 1500, "wire_feed": 8.0},
+        )
+        col.add(Toolpath([pt], name="cut"))
+        out = post.process(col)
+        assert "power" in out
+        assert "wire_feed" in out
+
+    def test_empty_collection(self):
+        post = DebugPostProcessor(format="text")
+        col = ToolpathCollection("empty")
+        out = post.process(col)
+        assert "empty" in out
+        assert isinstance(out, str)
