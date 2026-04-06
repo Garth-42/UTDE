@@ -7,6 +7,7 @@ const INITIAL = {
   scriptOutput: null,
   scriptRunning: false,
   graphView: true,
+  scriptView: false,
   showToolpaths: false,
 };
 
@@ -75,6 +76,37 @@ describe("showToolpaths", () => {
   it("setShowToolpaths sets directly", () => {
     useUiStore.getState().setShowToolpaths(true);
     expect(useUiStore.getState().showToolpaths).toBe(true);
+  });
+});
+
+describe("scriptView", () => {
+  it("defaults to false", () => {
+    expect(useUiStore.getState().scriptView).toBe(false);
+  });
+
+  it("setScriptView true enables script view and clears graphView", () => {
+    useUiStore.getState().setScriptView(true);
+    expect(useUiStore.getState().scriptView).toBe(true);
+    expect(useUiStore.getState().graphView).toBe(false);
+  });
+
+  it("setScriptView false disables script view", () => {
+    useUiStore.setState({ scriptView: true });
+    useUiStore.getState().setScriptView(false);
+    expect(useUiStore.getState().scriptView).toBe(false);
+  });
+
+  it("toggleScriptView flips scriptView", () => {
+    useUiStore.getState().toggleScriptView();
+    expect(useUiStore.getState().scriptView).toBe(true);
+    useUiStore.getState().toggleScriptView();
+    expect(useUiStore.getState().scriptView).toBe(false);
+  });
+
+  it("toggleGraphView clears scriptView", () => {
+    useUiStore.setState({ scriptView: true, graphView: false });
+    useUiStore.getState().toggleGraphView();
+    expect(useUiStore.getState().scriptView).toBe(false);
   });
 });
 

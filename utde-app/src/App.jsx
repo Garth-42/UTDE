@@ -9,6 +9,7 @@ import { useStepStore } from "./store/stepStore";
 import { loadSession } from "./utils/session";
 import { waitForServer, IS_TAURI } from "./lib/backend";
 import NodeGraphPanel from "./components/NodeGraph/NodeGraphPanel";
+import ScriptPanel    from "./components/ScriptView/ScriptPanel";
 
 const ROOT = {
   width: "100%", height: "100vh",
@@ -21,6 +22,7 @@ const ROOT = {
 export default function App() {
   const activePanel = useUiStore((s) => s.activePanel);
   const graphView   = useUiStore((s) => s.graphView);
+  const scriptView  = useUiStore((s) => s.scriptView);
 
   const [serverReady, setServerReady] = useState(!IS_TAURI);
   const [serverError, setServerError] = useState(null);
@@ -56,7 +58,12 @@ export default function App() {
         <Sidebar />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-            {graphView ? <NodeGraphPanel /> : <StepViewport />}
+            {scriptView
+              ? <ScriptPanel />
+              : graphView
+                ? <NodeGraphPanel />
+                : <StepViewport />
+            }
           </div>
 
           {activePanel === "code" && (

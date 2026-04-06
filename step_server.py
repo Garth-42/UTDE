@@ -611,6 +611,32 @@ def generate_toolpath():
         return jsonify({"error": f"Toolpath generation failed: {str(e)}"}), 500
 
 
+@app.route("/lint-script", methods=["POST"])
+def lint_script():
+    """
+    Stateless Python syntax check using ast.parse().
+    Returns a list of error objects: { line, col, message }.
+    """
+    import ast
+    data = request.get_json(force=True)
+    code = data.get("code", "")
+
+    if not code.strip():
+        return jsonify({"errors": []})
+
+    try:
+        ast.parse(code)
+        return jsonify({"errors": []})
+    except SyntaxError as e:
+        return jsonify({"errors": [{
+            "line":    (e.lineno or 1) - 1,  # 0-indexed for CodeMirror
+            "col":     (e.offset or 1) - 1,
+            "message": e.msg,
+        }]})
+    except Exception as e:
+        return jsonify({"errors": [{"line": 0, "col": 0, "message": str(e)}]})
+
+
 @app.route("/run-script", methods=["POST"])
 def run_script():
     """

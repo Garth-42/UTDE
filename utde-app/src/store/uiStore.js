@@ -11,6 +11,7 @@ export const useUiStore = create((set) => ({
 
   showBasePlate: true,
   graphView: true,           // default to node graph view
+  scriptView: false,         // script editor view (overrides graphView when true)
   showToolpaths: false,      // toggle toolpath lines in 3D view
 
   // Geometry pick mode: set when a node requests face/edge selection from the viewport
@@ -22,7 +23,9 @@ export const useUiStore = create((set) => ({
   setScriptOutput: (scriptOutput) => set({ scriptOutput }),
   setScriptRunning: (scriptRunning) => set({ scriptRunning }),
   toggleBasePlate: () => set((s) => ({ showBasePlate: !s.showBasePlate })),
-  toggleGraphView: () => set((s) => ({ graphView: !s.graphView })),
+  toggleGraphView: () => set((s) => ({ graphView: !s.graphView, scriptView: false })),
+  setScriptView:   (v) => set({ scriptView: v, graphView: false }),
+  toggleScriptView: () => set((s) => ({ scriptView: !s.scriptView })),
   toggleToolpaths: () => set((s) => ({ showToolpaths: !s.showToolpaths })),
   setShowToolpaths: (v) => set({ showToolpaths: v }),
 
