@@ -6,26 +6,61 @@ import { useGraphStore } from "../../store/graphStore";
 import { useStepStore }  from "../../store/stepStore";
 import { useUiStore }    from "../../store/uiStore";
 import { useToolpathStore } from "../../store/toolpathStore";
-import { runScript }     from "../../api/client";
+import { runScript, lintScript } from "../../api/client";
 import { saveGcodeDialog, IS_TAURI } from "../../lib/backend";
 import { S } from "../styles";
 
-import { utdeTheme }    from "./codeTheme";
+import { utdeTheme }     from "./codeTheme";
 import { graphToScript } from "./graphToScript";
 import { scriptToGraph } from "./scriptToGraph";
-import InspectorPanel   from "../NodeGraph/InspectorPanel";
+import InspectorPanel    from "../NodeGraph/InspectorPanel";
 
-const DEBOUNCE_MS = 300;
+const PARSE_DEBOUNCE_MS = 300;
+const LINT_DEBOUNCE_MS  = 500;
+
+// ── Section → node mapping ────────────────────────────────────────────────────
+// Maps section-header comment patterns to graphStore node types.
+const SECTION_NODE_MAP = [
+  { pattern: /# ── Geometry/,         nodeType: "geometry"       },
+  { pattern: /# ── Machine/,          nodeType: "post_processor" },
+  { pattern: /# ── Toolpath strategy/,nodeType: "strategy"       },
+  { pattern: /# ── Orientation rules/,nodeType: "orient"         },
+  { pattern: /# ── G-code output/,    nodeType: "post_processor" },
+  { pattern: /paths\.orient\(/,       nodeType: "orient"         },
+  { pattern: /Strategy\(\)\.generate/,nodeType: "strategy"       },
+  { pattern: /machine\s*=\s*Machine/, nodeType: "post_processor" },
+  { pattern: /PostProcessor/,         nodeType: "post_processor" },
+  { pattern: /Surface\.|Curve\.|GeometryModel/, nodeType: "geometry" },
+];
+
+/**
+ * Given the full code string and a 0-based cursor line number,
+ * return the graphStore node type the cursor is "inside".
+ */
+function nodeTypeForLine(code, cursorLine) {
+  const lines = code.split("\n");
+  let currentType = null;
+  for (let i = 0; i <= Math.min(cursorLine, lines.length - 1); i++) {
+    const line = lines[i];
+    for (const { pattern, nodeType } of SECTION_NODE_MAP) {
+      if (pattern.test(line)) { currentType = nodeType; break; }
+    }
+  }
+  return currentType;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ScriptPanel() {
   const nodes         = useGraphStore((s) => s.nodes);
   const edges         = useGraphStore((s) => s.edges);
   const generatedCode = useGraphStore((s) => s.generatedCode);
   const gcodeOutput   = useGraphStore((s) => s.gcodeOutput);
-  const setGeneratedCode = useGraphStore((s) => s.setGeneratedCode);
-  const setGcodeOutput   = useGraphStore((s) => s.setGcodeOutput);
-  const setCopied        = useGraphStore((s) => s.setCopied);
-  const codeCopied       = useGraphStore((s) => s.codeCopied);
+  const setGeneratedCode  = useGraphStore((s) => s.setGeneratedCode);
+  const setGcodeOutput    = useGraphStore((s) => s.setGcodeOutput);
+  const setCopied         = useGraphStore((s) => s.setCopied);
+  const codeCopied        = useGraphStore((s) => s.codeCopied);
+  const setSelectedNode   = useGraphStore((s) => s.setSelectedNode);
 
   const faces         = useStepStore((s) => s.getSelectedFaces());
   const allEdgesStore = useStepStore((s) => s.getSelectedEdges());
@@ -40,24 +75,27 @@ export default function ScriptPanel() {
   const setScriptRunning = useUiStore((s) => s.setScriptRunning);
   const setScriptView    = useUiStore((s) => s.setScriptView);
 
-  const addToolpath    = useToolpathStore((s) => s.addToolpath);
+  const addToolpath      = useToolpathStore((s) => s.addToolpath);
   const setShowToolpaths = useUiStore((s) => s.setShowToolpaths);
 
-  // Local editor value — initialised from generatedCode or freshly generated
   const [code, setCode] = useState(() => {
     if (generatedCode) return generatedCode;
     return graphToScript({ nodes, edges }, faces, allEdgesStore, machine);
   });
 
-  // Track whether the user has manually edited (dirty flag)
   const [dirty, setDirty] = useState(false);
 
-  // Gutter / parse state: { unparsed: Set<number>, updated: Set<number> }
-  const [parseState, setParseState] = useState({ unparsed: new Set(), updated: new Set() });
+  // Parse gutter state
+  const [unparsedLines, setUnparsedLines] = useState(new Set());
+  const [flashLines,    setFlashLines]    = useState(new Set());
 
-  const debounceRef = useRef(null);
+  // Lint error state: [{ line, col, message }]
+  const [lintErrors, setLintErrors] = useState([]);
 
-  // When the graph changes externally and the user has NOT edited, re-sync
+  const parseDebounceRef = useRef(null);
+  const lintDebounceRef  = useRef(null);
+
+  // Sync from graph when not dirty
   useEffect(() => {
     if (dirty) return;
     const fresh = graphToScript({ nodes, edges }, faces, allEdgesStore, machine);
@@ -70,20 +108,43 @@ export default function ScriptPanel() {
     setDirty(true);
     setGeneratedCode(value);
 
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
+    // ── Parse debounce (300ms) → scriptToGraph + gutter markers
+    clearTimeout(parseDebounceRef.current);
+    parseDebounceRef.current = setTimeout(() => {
       const result = scriptToGraph(value);
-      setParseState({
-        unparsed: new Set(result.unparsedLines),
-        updated:  new Set(result.updatedLines),
-      });
+      setUnparsedLines(new Set(result.unparsedLines));
 
-      // Flash updated lines briefly
       if (result.updatedLines.length > 0) {
-        setTimeout(() => setParseState((ps) => ({ ...ps, updated: new Set() })), 400);
+        setFlashLines(new Set(result.updatedLines));
+        setTimeout(() => setFlashLines(new Set()), 400);
       }
-    }, DEBOUNCE_MS);
+    }, PARSE_DEBOUNCE_MS);
+
+    // ── Lint debounce (500ms) → /lint-script
+    clearTimeout(lintDebounceRef.current);
+    lintDebounceRef.current = setTimeout(async () => {
+      try {
+        const { errors } = await lintScript(value);
+        setLintErrors(errors ?? []);
+      } catch {
+        // Server unavailable — silently ignore lint errors
+      }
+    }, LINT_DEBOUNCE_MS);
   }, [setGeneratedCode]);
+
+  // ── Cursor → Inspector node selection ─────────────────────────────────────
+  const handleUpdate = useCallback((viewUpdate) => {
+    if (!viewUpdate.selectionSet) return;
+    const cursorLine = viewUpdate.state.doc.lineAt(
+      viewUpdate.state.selection.main.head
+    ).number - 1; // 0-based
+
+    const nodeType = nodeTypeForLine(code, cursorLine);
+    if (!nodeType) return;
+
+    const matchingNode = nodes.find((n) => n.type === nodeType);
+    if (matchingNode) setSelectedNode(matchingNode.id);
+  }, [code, nodes, setSelectedNode]);
 
   const handleRun = async () => {
     setScriptRunning(true);
@@ -91,7 +152,7 @@ export default function ScriptPanel() {
     try {
       const result = await runScript(code);
       setScriptOutput(result);
-      if (result.gcode) setGcodeOutput(result.gcode);
+      if (result.gcode)         setGcodeOutput(result.gcode);
       if (result.points?.length) {
         addToolpath(`script — ${new Date().toLocaleTimeString()}`, result.points, "#6355e0");
         setShowToolpaths(true);
@@ -110,7 +171,9 @@ export default function ScriptPanel() {
     setCode(fresh);
     setGeneratedCode(fresh);
     setDirty(false);
-    setParseState({ unparsed: new Set(), updated: new Set() });
+    setUnparsedLines(new Set());
+    setFlashLines(new Set());
+    setLintErrors([]);
   };
 
   const downloadGcode = async () => {
@@ -136,9 +199,7 @@ export default function ScriptPanel() {
         }}>
           <span style={{ ...S.sectionLabel, color: "#9090aa", flex: 1 }}>SCRIPT</span>
           {dirty && (
-            <span style={{ fontSize: 9, color: "#d97706", marginRight: 4 }}>
-              ● unsaved edits
-            </span>
+            <span style={{ fontSize: 9, color: "#d97706", marginRight: 4 }}>● unsaved edits</span>
           )}
           <button onClick={handleRegenerate} style={{ ...S.btn, fontSize: 10 }} title="Re-generate from graph">
             ↺ REGENERATE
@@ -146,28 +207,32 @@ export default function ScriptPanel() {
           <button onClick={handleCopy} style={{ ...S.btn, fontSize: 10 }}>
             {codeCopied ? "COPIED ✓" : "COPY"}
           </button>
-          <button
-            onClick={handleRun}
-            disabled={scriptRunning}
-            style={{ ...S.primaryBtn, fontSize: 10 }}
-          >
+          <button onClick={handleRun} disabled={scriptRunning} style={{ ...S.primaryBtn, fontSize: 10 }}>
             {scriptRunning ? "RUNNING…" : "▷ RUN"}
           </button>
           {gcodeOutput && (
-            <button onClick={downloadGcode} style={{ ...S.btn, fontSize: 10 }}>
-              ⬇ G-CODE
-            </button>
+            <button onClick={downloadGcode} style={{ ...S.btn, fontSize: 10 }}>⬇ G-CODE</button>
           )}
           <button onClick={() => setScriptView(false)} style={{ ...S.iconBtn, marginLeft: 4 }}>×</button>
         </div>
 
-        {/* Parse status bar */}
-        {(parseState.unparsed.size > 0) && (
+        {/* Status bar */}
+        {(unparsedLines.size > 0 || lintErrors.length > 0) && (
           <div style={{
             padding: "3px 12px", fontSize: 9, background: "#1a140a",
-            borderBottom: "1px solid #3a2a0a", color: "#d97706",
+            borderBottom: "1px solid #3a2a0a",
+            display: "flex", gap: 12,
           }}>
-            {parseState.unparsed.size} line{parseState.unparsed.size !== 1 ? "s" : ""} not recognised — shown with yellow markers. Edits are saved but won't update the node graph.
+            {unparsedLines.size > 0 && (
+              <span style={{ color: "#d97706" }}>
+                ● {unparsedLines.size} line{unparsedLines.size !== 1 ? "s" : ""} not recognised
+              </span>
+            )}
+            {lintErrors.length > 0 && (
+              <span style={{ color: "#d93025" }}>
+                ✕ {lintErrors.length} syntax error{lintErrors.length !== 1 ? "s" : ""}
+              </span>
+            )}
           </div>
         )}
 
@@ -176,20 +241,23 @@ export default function ScriptPanel() {
           <ReactCodeMirror
             value={code}
             onChange={handleChange}
+            onUpdate={handleUpdate}
             extensions={[python()]}
             theme={utdeTheme}
             basicSetup={{
-              lineNumbers:      true,
-              foldGutter:       true,
+              lineNumbers:         true,
+              foldGutter:          true,
               highlightActiveLine: true,
-              autocompletion:   false,
+              autocompletion:      false,
             }}
             style={{ height: "100%", fontSize: 12 }}
           />
-          {/* Yellow gutter overlay for unparsed lines */}
-          {parseState.unparsed.size > 0 && (
-            <UnparsedOverlay unparsed={parseState.unparsed} code={code} />
-          )}
+          <GutterOverlay
+            unparsedLines={unparsedLines}
+            flashLines={flashLines}
+            lintErrors={lintErrors}
+            code={code}
+          />
         </div>
 
         {/* Script output strip */}
@@ -215,41 +283,71 @@ export default function ScriptPanel() {
         )}
       </div>
 
-      {/* Inspector panel — reused from node graph view */}
+      {/* Inspector panel */}
       <InspectorPanel />
     </div>
   );
 }
 
-/**
- * Simple overlay that marks unparsed line numbers with a yellow left border.
- * Positioned absolutely over the editor; line height is approximated at 20px.
- */
-function UnparsedOverlay({ unparsed, code }) {
-  const lines = code.split("\n");
-  const LINE_H = 20; // px — matches CodeMirror's default line height at font-size 12
-  const GUTTER_W = 32; // approximate gutter width
+// ── Gutter overlay ────────────────────────────────────────────────────────────
+
+const LINE_H   = 20;  // px — CodeMirror default line height at font-size 12
+const GUTTER_W = 32;  // approximate left gutter width
+
+function GutterOverlay({ unparsedLines, flashLines, lintErrors, code }) {
+  const [tooltip, setTooltip] = useState(null); // { x, y, message }
+  const lineCount = code.split("\n").length;
+
+  const lintByLine = {};
+  lintErrors.forEach((e) => { lintByLine[e.line] = e.message; });
 
   return (
     <div style={{
-      position: "absolute", top: 0, left: GUTTER_W, pointerEvents: "none",
-      width: 3, zIndex: 10,
+      position: "absolute", top: 0, left: GUTTER_W,
+      width: 4, height: lineCount * LINE_H,
+      pointerEvents: "none", zIndex: 10,
     }}>
-      {lines.map((_, i) =>
-        unparsed.has(i) ? (
+      {Array.from({ length: lineCount }, (_, i) => {
+        const isUnparsed = unparsedLines.has(i);
+        const isFlash    = flashLines.has(i);
+        const isLint     = lintByLine[i] !== undefined;
+
+        if (!isUnparsed && !isFlash && !isLint) return null;
+
+        const color = isLint ? "#d93025" : isFlash ? "#16a34a" : "#d97706";
+
+        return (
           <div
             key={i}
             style={{
               position: "absolute",
-              top:    i * LINE_H,
-              left:   0,
-              width:  3,
-              height: LINE_H,
-              background: "#d97706",
-              opacity: 0.8,
+              top: i * LINE_H, left: 0,
+              width: 4, height: LINE_H,
+              background: color,
+              opacity: isFlash ? 0.9 : 0.75,
+              // Re-enable pointer events on lint markers for tooltip
+              pointerEvents: isLint ? "auto" : "none",
+              cursor: isLint ? "help" : "default",
+              transition: isFlash ? "opacity 0.4s" : "none",
             }}
+            onMouseEnter={isLint ? (e) => setTooltip({ x: e.clientX + 12, y: e.clientY, message: lintByLine[i] }) : undefined}
+            onMouseLeave={isLint ? () => setTooltip(null) : undefined}
           />
-        ) : null
+        );
+      })}
+
+      {/* Tooltip */}
+      {tooltip && (
+        <div style={{
+          position: "fixed", left: tooltip.x, top: tooltip.y,
+          background: "#1a0a0a", border: "1px solid #d93025",
+          color: "#f87171", fontSize: 10, padding: "4px 8px",
+          borderRadius: 4, zIndex: 1000, maxWidth: 300,
+          pointerEvents: "none", fontFamily: "'JetBrains Mono', monospace",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
+        }}>
+          {tooltip.message}
+        </div>
       )}
     </div>
   );

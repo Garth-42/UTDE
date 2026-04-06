@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { parseStep, generateToolpath, runScript, checkHealth, parseStepByPath } from "../../api/client";
+import { parseStep, generateToolpath, runScript, checkHealth, parseStepByPath, lintScript } from "../../api/client";
 
 // ── Mock Tauri so tests run in jsdom without a real desktop process ────────────
 vi.mock("@tauri-apps/api/core", () => ({
@@ -214,5 +214,34 @@ describe("runScript", () => {
     mockFetch(200, { success: true, stdout: "", stderr: "", gcode: "G0 Z50\nM30" });
     const result = await runScript("...");
     expect(result.gcode).toContain("M30");
+  });
+});
+
+describe("lintScript", () => {
+  it("sends POST to /lint-script with code", async () => {
+    mockFetch(200, { errors: [] });
+    await lintScript("x = 1");
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/lint-script"),
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("returns empty errors for valid code", async () => {
+    mockFetch(200, { errors: [] });
+    const result = await lintScript("x = 1 + 1");
+    expect(result.errors).toEqual([]);
+  });
+
+  it("returns error objects for invalid code", async () => {
+    mockFetch(200, { errors: [{ line: 0, col: 0, message: "invalid syntax" }] });
+    const result = await lintScript("def foo(\n");
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].message).toBe("invalid syntax");
+  });
+
+  it("throws on HTTP error", async () => {
+    mockFetch(500, { error: "Server error" });
+    await expect(lintScript("x = 1")).rejects.toThrow("Server error");
   });
 });
