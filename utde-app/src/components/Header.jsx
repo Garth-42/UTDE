@@ -12,12 +12,14 @@ const BTN = (active) => ({
 });
 
 export default function Header() {
-  const graphView       = useUiStore((s) => s.graphView);
-  const showToolpaths   = useUiStore((s) => s.showToolpaths);
-  const toggleGraphView = useUiStore((s) => s.toggleGraphView);
-  const toggleToolpaths = useUiStore((s) => s.toggleToolpaths);
-  const fileName        = useStepStore((s) => s.fileName);
-  const toolpathCount   = useToolpathStore((s) => s.toolpaths.length);
+  const graphView        = useUiStore((s) => s.graphView);
+  const scriptView       = useUiStore((s) => s.scriptView);
+  const showToolpaths    = useUiStore((s) => s.showToolpaths);
+  const toggleGraphView  = useUiStore((s) => s.toggleGraphView);
+  const toggleScriptView = useUiStore((s) => s.toggleScriptView);
+  const toggleToolpaths  = useUiStore((s) => s.toggleToolpaths);
+  const fileName         = useStepStore((s) => s.fileName);
+  const toolpathCount    = useToolpathStore((s) => s.toolpaths.length);
 
   return (
     <div style={{
@@ -43,9 +45,15 @@ export default function Header() {
         </>
       )}
 
-      {/* 3D / Graph view toggle */}
-      <button style={BTN(graphView)} onClick={toggleGraphView}>
-        {graphView ? "◁ 3D VIEW" : "⬡ NODE GRAPH"}
+      {/* View mode toggles */}
+      <button style={BTN(!graphView && !scriptView)} onClick={() => { if (graphView || scriptView) toggleGraphView(); }}>
+        ◁ 3D
+      </button>
+      <button style={BTN(graphView && !scriptView)} onClick={() => { if (scriptView) toggleScriptView(); if (!graphView) toggleGraphView(); }}>
+        ⬡ GRAPH
+      </button>
+      <button style={BTN(scriptView)} onClick={toggleScriptView}>
+        ✎ SCRIPT
       </button>
 
       <div style={{ width: 1, height: 20, background: "#d0d0df" }} />

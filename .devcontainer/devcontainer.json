@@ -10,7 +10,7 @@
     "DEBIAN_FRONTEND": "noninteractive",
     "TZ": "America/Chicago"
   },
-  "postCreateCommand": "ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && apt-get update -qq && apt-get install -y xvfb x11vnc openbox novnc websockify netcat-openbsd lsof pkg-config libglib2.0-dev libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libjavascriptcoregtk-4.1-dev && conda install -y -n base -c conda-forge python=3.12 pythonocc-core numpy scipy pyyaml && conda run -n base pip install flask flask-cors pytest && conda run -n base pip install -e utde_v0.1.0/ && conda run -n base pip install -r docs/requirements.txt && cd utde-app && npm install && rustup component add rust-analyzer",
+  "postCreateCommand": "ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && apt-get update -qq && apt-get install -y xvfb x11vnc openbox novnc websockify netcat-openbsd lsof pkg-config libglib2.0-dev libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libjavascriptcoregtk-4.1-dev && conda install -y -n base -c conda-forge python=3.12 pythonocc-core numpy scipy pyyaml && conda run -n base pip install flask flask-cors pytest && conda run -n base pip install -e utde_v0.1.0/ && conda run -n base pip install -r docs/requirements.txt && cd utde-app && npm install && npm install @uiw/react-codemirror @codemirror/lang-python && rustup component add rust-analyzer",
   "forwardPorts": [3000, 5174, 6080],
   "portsAttributes": {
     "3000": { "label": "Vite Dev Server" },

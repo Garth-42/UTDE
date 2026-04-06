@@ -332,3 +332,59 @@ class TestRunScript:
         assert "stdout" in body
         assert "stderr" in body
         assert "gcode" in body
+
+
+# ── /lint-script ──────────────────────────────────────────────────────────────
+
+
+class TestLintScript:
+    def _post(self, client, code):
+        return client.post(
+            "/lint-script",
+            data=json.dumps({"code": code}),
+            content_type="application/json",
+        )
+
+    def test_valid_code_returns_no_errors(self, client):
+        code = "x = 1 + 1\nprint(x)\n"
+        res = self._post(client, code)
+        body = json.loads(res.data)
+        assert res.status_code == 200
+        assert body["errors"] == []
+
+    def test_syntax_error_returns_error(self, client):
+        code = "def foo(\n    pass\n"
+        res = self._post(client, code)
+        body = json.loads(res.data)
+        assert res.status_code == 200
+        assert len(body["errors"]) > 0
+
+    def test_syntax_error_has_required_fields(self, client):
+        code = "x = (\n"
+        res = self._post(client, code)
+        body = json.loads(res.data)
+        error = body["errors"][0]
+        assert "line" in error
+        assert "col" in error
+        assert "message" in error
+
+    def test_syntax_error_line_is_zero_indexed(self, client):
+        code = "x = 1\ny = (\n"
+        res = self._post(client, code)
+        body = json.loads(res.data)
+        assert body["errors"][0]["line"] >= 0
+
+    def test_empty_code_returns_no_errors(self, client):
+        res = self._post(client, "")
+        body = json.loads(res.data)
+        assert body["errors"] == []
+
+    def test_multiline_valid_script_returns_no_errors(self, client):
+        code = (
+            "from toolpath_engine import Surface\n"
+            "model = None\n"
+            "x = 1 + 2\n"
+        )
+        res = self._post(client, code)
+        body = json.loads(res.data)
+        assert body["errors"] == []
