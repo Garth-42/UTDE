@@ -10,10 +10,11 @@ import { runScript, lintScript } from "../../api/client";
 import { saveGcodeDialog, IS_TAURI } from "../../lib/backend";
 import { S } from "../styles";
 
-import { utdeTheme }     from "./codeTheme";
-import { graphToScript } from "./graphToScript";
-import { scriptToGraph } from "./scriptToGraph";
-import InspectorPanel    from "../NodeGraph/InspectorPanel";
+import { utdeTheme }       from "./codeTheme";
+import { graphToScript }   from "./graphToScript";
+import { scriptToGraph }   from "./scriptToGraph";
+import { utdeCompletions } from "./completions";
+import InspectorPanel      from "../NodeGraph/InspectorPanel";
 
 const PARSE_DEBOUNCE_MS = 300;
 const LINT_DEBOUNCE_MS  = 500;
@@ -242,13 +243,13 @@ export default function ScriptPanel() {
             value={code}
             onChange={handleChange}
             onUpdate={handleUpdate}
-            extensions={[python()]}
+            extensions={[python(), utdeCompletions]}
             theme={utdeTheme}
             basicSetup={{
               lineNumbers:         true,
               foldGutter:          true,
               highlightActiveLine: true,
-              autocompletion:      false,
+              autocompletion:      false, // disabled in basicSetup — we use utdeCompletions instead
             }}
             style={{ height: "100%", fontSize: 12 }}
           />
