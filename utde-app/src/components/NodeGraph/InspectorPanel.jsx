@@ -202,8 +202,15 @@ function StrategyInspector({ node }) {
         onChange={(v) => set("path_type", v)} />
 
       {p.strategy_type === "follow_curve" && (
-        <Field label="Spacing" value={p.spacing} step={0.1} min={0.1}
-          onChange={(v) => set("spacing", v)} />
+        <>
+          <Field label="Spacing"       value={p.spacing}       step={0.1} min={0.1} onChange={(v) => set("spacing", v)} />
+          <Field label="Normal offset" value={p.normal_offset} step={0.1}            onChange={(v) => set("normal_offset", v)} />
+          <Field label="Inset"         value={p.edge_inset}    step={0.1} min={0}    onChange={(v) => set("edge_inset", v)} />
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+            <span style={{ fontSize: 10, color: "#66667a", minWidth: 80, flexShrink: 0 }}>Chain edges</span>
+            <input type="checkbox" checked={!!p.chain} onChange={(e) => set("chain", e.target.checked)} />
+          </div>
+        </>
       )}
       {p.strategy_type === "raster_fill" && (
         <>
@@ -211,12 +218,42 @@ function StrategyInspector({ node }) {
           <Field label="Angle °"       value={p.angle}                               onChange={(v) => set("angle", v)} />
           <Field label="Normal offset" value={p.normal_offset} step={0.1}            onChange={(v) => set("normal_offset", v)} />
           <Field label="Edge inset"    value={p.edge_inset}    step={0.1} min={0}    onChange={(v) => set("edge_inset", v)} />
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+            <span style={{ fontSize: 10, color: "#66667a", minWidth: 80, flexShrink: 0 }}>Respect holes</span>
+            <input type="checkbox" checked={p.respect_interior_boundaries !== false} onChange={(e) => set("respect_interior_boundaries", e.target.checked)} />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+            <span style={{ fontSize: 10, color: "#66667a", minWidth: 80, flexShrink: 0 }}>Chord tol (mm)</span>
+            <input
+              type="number" min={0.001} step={0.01}
+              value={p.chord_tolerance ?? ""}
+              placeholder="auto"
+              onChange={(e) => set("chord_tolerance", e.target.value === "" ? null : Number(e.target.value))}
+              style={{ flex: 1, background: "#f4f4fa", border: "1px solid #d0d0df", borderRadius: 4, color: "#1a1a2e", padding: "3px 6px", fontSize: 10, fontFamily: "inherit" }}
+            />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+            <span style={{ fontSize: 10, color: "#66667a", minWidth: 80, flexShrink: 0 }}>Scallop ht (mm)</span>
+            <input
+              type="number" min={0.001} step={0.01}
+              value={p.scallop_height ?? ""}
+              placeholder="auto"
+              onChange={(e) => set("scallop_height", e.target.value === "" ? null : Number(e.target.value))}
+              style={{ flex: 1, background: "#f4f4fa", border: "1px solid #d0d0df", borderRadius: 4, color: "#1a1a2e", padding: "3px 6px", fontSize: 10, fontFamily: "inherit" }}
+            />
+          </div>
         </>
       )}
       {p.strategy_type === "contour_parallel" && (
         <>
-          <Field label="Stepover" value={p.stepover}   step={0.5} min={0.1} onChange={(v) => set("stepover", v)} />
-          <Field label="Passes"   value={p.num_passes} min={1}               onChange={(v) => set("num_passes", v)} />
+          <Field label="Stepover"      value={p.stepover}       step={0.5} min={0.1} onChange={(v) => set("stepover", v)} />
+          <Field label="Passes"        value={p.num_passes}     min={1}               onChange={(v) => set("num_passes", v)} />
+          <Field label="Normal offset" value={p.normal_offset}  step={0.1}            onChange={(v) => set("normal_offset", v)} />
+          <Field label="Inset"         value={p.edge_inset}     step={0.1} min={0}    onChange={(v) => set("edge_inset", v)} />
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+            <span style={{ fontSize: 10, color: "#66667a", minWidth: 80, flexShrink: 0 }}>Chain edges</span>
+            <input type="checkbox" checked={!!p.chain} onChange={(e) => set("chain", e.target.checked)} />
+          </div>
         </>
       )}
 

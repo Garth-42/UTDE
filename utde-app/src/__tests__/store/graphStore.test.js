@@ -236,6 +236,43 @@ describe("graphStore — pipeline invalidation clears toolpaths", () => {
   });
 });
 
+describe("graphStore — addNodeOfType", () => {
+  it("adds a geometry node at the given position", () => {
+    useGraphStore.getState().addNodeOfType("geometry", {}, { x: 100, y: 200 });
+    const { nodes } = useGraphStore.getState();
+    const geoNodes = nodes.filter((n) => n.type === "geometry");
+    // At least two: the initial one plus the newly added one
+    expect(geoNodes.length).toBeGreaterThanOrEqual(2);
+    const added = geoNodes.find((n) => n.position.x === 100 && n.position.y === 200);
+    expect(added).toBeDefined();
+  });
+
+  it("adds an orient node with rule lead", () => {
+    useGraphStore.getState().addNodeOfType("orient", { rule: "lead" }, { x: 0, y: 0 });
+    const { nodes } = useGraphStore.getState();
+    const orientNodes = nodes.filter((n) => n.type === "orient");
+    expect(orientNodes.length).toBeGreaterThanOrEqual(1);
+    const added = orientNodes.find((n) => n.params.rule === "lead");
+    expect(added).toBeDefined();
+  });
+
+  it("adds a strategy node with raster_fill strategy_type", () => {
+    useGraphStore.getState().addNodeOfType("strategy", { strategy_type: "raster_fill" }, { x: 0, y: 0 });
+    const { nodes } = useGraphStore.getState();
+    const stratNodes = nodes.filter((n) => n.type === "strategy");
+    expect(stratNodes.length).toBeGreaterThanOrEqual(2);
+    const added = stratNodes.find((n) => n.params.strategy_type === "raster_fill" && n.id !== "node_strategy");
+    expect(added).toBeDefined();
+  });
+
+  it("uses default position when position is null", () => {
+    const before = useGraphStore.getState().nodes.length;
+    useGraphStore.getState().addNodeOfType("geometry", {}, null);
+    const after = useGraphStore.getState().nodes.length;
+    expect(after).toBe(before + 1);
+  });
+});
+
 describe("graphStore — selectedNodeId", () => {
   it("starts as null", () => {
     expect(useGraphStore.getState().selectedNodeId).toBeNull();

@@ -10,7 +10,7 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-import { useGraphStore, getOrientNodes } from "../../store/graphStore";
+import { useGraphStore, getOrientNodes, NODE_REGISTRY } from "../../store/graphStore";
 import { useStepStore } from "../../store/stepStore";
 import { useToolpathStore } from "../../store/toolpathStore";
 import { useUiStore } from "../../store/uiStore";
@@ -24,6 +24,7 @@ import OrientNode        from "./nodes/OrientNode";
 import PostProcessorNode from "./nodes/PostProcessorNode";
 import StepImportNode    from "./nodes/StepImportNode";
 import InspectorPanel    from "./InspectorPanel";
+import NodePalette       from "./NodePalette";
 import { NODE_COLORS }   from "./nodes/nodeStyles";
 import { S }             from "../styles";
 
@@ -183,8 +184,42 @@ function NodeGraphInner() {
   const setShowToolpaths  = useUiStore((s) => s.setShowToolpaths);
   const toggleGraphView   = useUiStore((s) => s.toggleGraphView);
 
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, getViewport } = useReactFlow();
   const [contextMenu, setContextMenu] = useState(null);
+
+  // ── Palette handlers ───────────────────────────────────────────────────────
+
+  const handlePaletteAdd = useCallback((type, params, position) => {
+    if (position) {
+      addNodeToStore(type, position, params);
+    } else {
+      // Default to viewport centre
+      const vp = getViewport();
+      const centreFlow = screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      addNodeToStore(type, centreFlow, params);
+    }
+  }, [addNodeToStore, getViewport, screenToFlowPosition]);
+
+  const onDrop = useCallback((event) => {
+    event.preventDefault();
+    const raw = event.dataTransfer.getData("application/utde-node");
+    if (!raw) return;
+    try {
+      const { type, params } = JSON.parse(raw);
+      const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      addNodeToStore(type, flowPos, params ?? {});
+    } catch {
+      // malformed drag data — ignore
+    }
+  }, [addNodeToStore, screenToFlowPosition]);
+
+  const onDragOver = useCallback((event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }, []);
 
   const rfNodes = useMemo(() => toRFNodes(nodes, selectedNodeId), [nodes, selectedNodeId]);
   const rfEdges = useMemo(() => toRFEdges(edges, nodes), [edges, nodes]);
@@ -198,10 +233,15 @@ function NodeGraphInner() {
       }
       if (change.type === "remove") {
         const node = nodes.find((n) => n.id === change.id);
-        // Geometry and post_processor are structural anchors — disallow deletion
-        if (node && node.type !== "geometry" && node.type !== "post_processor") {
-          removeNode(change.id);
+        if (!node) return;
+        // Geometry node is the single hardcoded anchor — never deletable.
+        if (node.type === "geometry") return;
+        // Allow deleting post_processor nodes unless it's the last one.
+        if (node.type === "post_processor") {
+          const postCount = nodes.filter((n) => n.type === "post_processor").length;
+          if (postCount <= 1) return;
         }
+        removeNode(change.id);
       }
     });
   }, [updateNodePosition, removeNode, nodes]);
@@ -381,39 +421,47 @@ function NodeGraphInner() {
         </div>
       </div>
 
-      {/* React Flow canvas */}
-      <div style={{ flex: 1, position: "relative" }}>
-        <ReactFlow
-          nodes={rfNodes}
-          edges={rfEdges}
-          nodeTypes={NODE_TYPES}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onNodeClick={onNodeClick}
-          onPaneClick={onPaneClick}
-          onPaneContextMenu={onPaneContextMenu}
-          fitView
-          fitViewOptions={{ padding: 0.3 }}
-          deleteKeyCode="Backspace"
-          style={{ background: "#f0f0f5" }}
-        >
-          <Background color="#d0d0df" gap={20} size={1} />
-          <Controls style={{ bottom: 16, left: 16 }} />
-          <MiniMap
-            nodeColor={(n) => NODE_COLORS[n.type] ?? "#aaa"}
-            style={{ bottom: 16, right: 16, background: "#eaeaf2", border: "1px solid #d0d0df" }}
-          />
-        </ReactFlow>
+      {/* React Flow canvas + palette */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <NodePalette
+          onAddNode={handlePaletteAdd}
+          onDragStart={undefined}
+        />
+        <div style={{ flex: 1, position: "relative" }}>
+          <ReactFlow
+            nodes={rfNodes}
+            edges={rfEdges}
+            nodeTypes={NODE_TYPES}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
+            onPaneContextMenu={onPaneContextMenu}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            fitView
+            fitViewOptions={{ padding: 0.3 }}
+            deleteKeyCode="Backspace"
+            style={{ background: "#f0f0f5" }}
+          >
+            <Background color="#d0d0df" gap={20} size={1} />
+            <Controls style={{ bottom: 16, left: 16 }} />
+            <MiniMap
+              nodeColor={(n) => NODE_COLORS[n.type] ?? "#aaa"}
+              style={{ bottom: 16, right: 16, background: "#eaeaf2", border: "1px solid #d0d0df" }}
+            />
+          </ReactFlow>
 
-        {contextMenu && (
-          <ContextMenu
-            x={contextMenu.screenX}
-            y={contextMenu.screenY}
-            onSelect={handleContextMenuSelect}
-            onClose={() => setContextMenu(null)}
-          />
-        )}
+          {contextMenu && (
+            <ContextMenu
+              x={contextMenu.screenX}
+              y={contextMenu.screenY}
+              onSelect={handleContextMenuSelect}
+              onClose={() => setContextMenu(null)}
+            />
+          )}
+        </div>
       </div>
 
       {/* Inspector panel */}

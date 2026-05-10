@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  python-tests:
+    name: Python tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install flask flask-cors pytest numpy scipy pyyaml
+          pip install -e utde_v0.1.0/
+
+      - name: Run tests
+        run: python -m pytest utde_v0.1.0/tests/ tests/ -v --tb=short
+
+  js-tests:
+    name: JS tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: utde-app/package-lock.json
+
+      - name: Install dependencies
+        run: cd utde-app && npm ci
+
+      - name: Run tests
+        run: cd utde-app && npm test

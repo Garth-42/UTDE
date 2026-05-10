@@ -46,12 +46,16 @@ const makeStrategyNode = () => ({
     selected_face_ids:  [],
     selected_edge_ids:  [],
     spacing:        1.0,
+    chain:          true,
     path_type:      "deposit",
     angle:          0,
     zigzag:         true,
     overshoot:      2.0,
     normal_offset:  0.0,
-    edge_inset:     0.0,
+    edge_inset:                  0.0,
+    respect_interior_boundaries: true,
+    chord_tolerance:             null,
+    scallop_height:              null,
     stepover:       3.0,
     num_passes:     4,
     direction:      "inward",
@@ -462,6 +466,13 @@ export const useGraphStore = create((set, get) => ({
     setTimeout(() => set({ codeCopied: false }), 2000);
   },
 
+  // ── Palette node creation ──────────────────────────────────────────────────
+
+  addNodeOfType: (type, params = {}, position = null) => {
+    const pos = position ?? { x: 300, y: 200 };
+    get().addNode(type, pos, params);
+  },
+
   reset: () =>
     set({
       nodes: INITIAL_NODES.map((n) => ({ ...n })),
@@ -471,3 +482,20 @@ export const useGraphStore = create((set, get) => ({
       gcodeOutput: "",
     }),
 }));
+
+// ─── Node Registry ────────────────────────────────────────────────────────────
+
+export const NODE_REGISTRY = [
+  { type: "step_import",    label: "STEP Import",       section: "Geometry",     params: {} },
+  { type: "geometry",       label: "Geometry Input",    section: "Geometry",     params: {} },
+  { type: "strategy",       label: "Follow Curve",      section: "Strategy",     params: { strategy_type: "follow_curve" } },
+  { type: "strategy",       label: "Raster Fill",       section: "Strategy",     params: { strategy_type: "raster_fill" } },
+  { type: "strategy",       label: "Contour Parallel",  section: "Strategy",     params: { strategy_type: "contour_parallel" } },
+  { type: "orient",         label: "to_normal",         section: "Orientation",  params: { rule: "to_normal" } },
+  { type: "orient",         label: "fixed",             section: "Orientation",  params: { rule: "fixed" } },
+  { type: "orient",         label: "lead",              section: "Orientation",  params: { rule: "lead" } },
+  { type: "orient",         label: "lag",               section: "Orientation",  params: { rule: "lag" } },
+  { type: "orient",         label: "side_tilt",         section: "Orientation",  params: { rule: "side_tilt" } },
+  { type: "orient",         label: "avoid_collision",   section: "Orientation",  params: { rule: "avoid_collision" } },
+  { type: "post_processor", label: "Post Processor",    section: "Post",         params: {} },
+];

@@ -156,6 +156,9 @@ class Surface:
     # Boundary loop: list of (x, y, z) tuples tracing the outer edge of the surface
     boundary_loop: Optional[List] = None
 
+    # Interior loops (holes): list of boundary loops, each a list of (x, y, z) tuples
+    interior_loops: Optional[List[List]] = None
+
     @classmethod
     def plane(cls, origin=(0, 0, 0), normal=(0, 0, 1), size=100, name="plane") -> "Surface":
         n = Vector3(*normal).normalized()
@@ -248,29 +251,140 @@ class Surface:
         return self._normal
 
     def closest_point(self, point: Vector3) -> Tuple[float, float, Vector3]:
-        """Find closest point on surface. Returns (u, v, closest_point)."""
+        """
+        Find the closest point on the surface to *point*.
+        Returns ``(u, v, closest_3d_point)``.
+
+        Analytical implementations are provided for every built-in surface
+        type so that strategies can call this uniformly without branching on
+        ``surface_type``.
+        """
         if self.surface_type == "plane":
             diff = point - self._origin
             u = diff.dot(self._u_dir)
             v = diff.dot(self._v_dir)
-            cp = self.evaluate(u, v)
-            return u, v, cp
+            return u, v, self.evaluate(u, v)
 
-        # For other types, use numerical sampling (simplified)
+        if self.surface_type == "cylinder":
+            # v = signed height along axis; u = angle around axis
+            axis = self._normal
+            d = point - self._origin
+            v = d.dot(axis)
+            # Rebuild local radial frame (same as evaluate())
+            if abs(axis.z) < 0.9:
+                ref = Vector3(0, 0, 1).cross(axis).normalized()
+            else:
+                ref = Vector3(1, 0, 0).cross(axis).normalized()
+            perp = axis.cross(ref).normalized()
+            radial = d - axis * v
+            u = math.atan2(radial.dot(perp), radial.dot(ref))
+            u_min, u_max = self.bounds[0], self.bounds[1]
+            while u < u_min - 1e-9:
+                u += 2 * math.pi
+            while u > u_max + 1e-9:
+                u -= 2 * math.pi
+            return u, v, self.evaluate(u, v)
+
+        if self.surface_type == "sphere":
+            # v = latitude (asin), u = longitude (atan2)
+            d = point - self._origin
+            length = math.sqrt(d.x**2 + d.y**2 + d.z**2)
+            if length < 1e-12:
+                return 0.0, 0.0, self._origin
+            v = math.asin(max(-1.0, min(1.0, d.z / length)))
+            u = math.atan2(d.y, d.x)
+            u_min, u_max = self.bounds[0], self.bounds[1]
+            while u < u_min - 1e-9:
+                u += 2 * math.pi
+            while u > u_max + 1e-9:
+                u -= 2 * math.pi
+            return u, v, self.evaluate(u, v)
+
+        # Generic fallback for any other surface type: coarse grid then refine
         best_u, best_v = 0.0, 0.0
         best_dist = float("inf")
-        nu, nv = 50, 50
         u0, u1, v0, v1 = self.bounds
-        for i in range(nu):
-            for j in range(nv):
-                u = u0 + (u1 - u0) * i / (nu - 1)
-                v = v0 + (v1 - v0) * j / (nv - 1)
-                p = self.evaluate(u, v)
-                d = p.distance_to(point)
+        for i in range(20):
+            for j in range(20):
+                u = u0 + (u1 - u0) * i / 19
+                v = v0 + (v1 - v0) * j / 19
+                d = self.evaluate(u, v).distance_to(point)
                 if d < best_dist:
-                    best_dist = d
-                    best_u, best_v = u, v
+                    best_dist, best_u, best_v = d, u, v
         return best_u, best_v, self.evaluate(best_u, best_v)
+
+    def _estimate_curvatures(self) -> Tuple[float, float]:
+        """
+        Estimate principal curvatures (κ_u, κ_v) at the surface centre using
+        finite differences on the normal field.  κ = |Δn| / |Δp| per unit arc.
+
+        Returns ``(kappa_u, kappa_v)`` in units of 1/mm.  Zero means flat in
+        that direction.
+        """
+        u0, u1, v0, v1 = self.bounds
+        uc = (u0 + u1) / 2.0
+        vc = (v0 + v1) / 2.0
+        du = (u1 - u0) * 0.02
+        dv = (v1 - v0) * 0.02
+
+        kappa_u = 0.0
+        if du > 1e-12:
+            p0 = self.evaluate(uc - du, vc)
+            p1 = self.evaluate(uc + du, vc)
+            arc = p0.distance_to(p1)
+            if arc > 1e-12:
+                n0 = self.normal_at(uc - du, vc)
+                n1 = self.normal_at(uc + du, vc)
+                kappa_u = n0.distance_to(n1) / arc
+
+        kappa_v = 0.0
+        if dv > 1e-12:
+            p0 = self.evaluate(uc, vc - dv)
+            p1 = self.evaluate(uc, vc + dv)
+            arc = p0.distance_to(p1)
+            if arc > 1e-12:
+                n0 = self.normal_at(uc, vc - dv)
+                n1 = self.normal_at(uc, vc + dv)
+                kappa_v = n0.distance_to(n1) / arc
+
+        return kappa_u, kappa_v
+
+    def max_step_for_tolerance(self, chord_tol: float) -> float:
+        """
+        Return the maximum step size in mm such that the chord between
+        consecutive toolpath points deviates from the true surface by at most
+        ``chord_tol`` mm.
+
+        Derived from the chordal-deviation formula for a circular arc of
+        radius R:  step = 2 √(2 R δ)  where δ = chord_tol.
+
+        Returns ``float('inf')`` for flat surfaces (no curvature constraint).
+        """
+        if chord_tol <= 0:
+            raise ValueError("chord_tol must be positive")
+        kappa_u, kappa_v = self._estimate_curvatures()
+        kappa_max = max(kappa_u, kappa_v)
+        if kappa_max < 1e-12:
+            return float("inf")
+        return 2.0 * math.sqrt(2.0 * chord_tol / kappa_max)
+
+    def max_spacing_for_scallop(self, scallop_height: float) -> float:
+        """
+        Return the maximum pass spacing in mm such that the maximum uncut
+        ridge between adjacent raster passes is at most ``scallop_height`` mm.
+
+        Uses the same chordal formula applied to the cross-pass curvature.
+
+        Returns ``float('inf')`` for surfaces that are flat in the cross-pass
+        direction.
+        """
+        if scallop_height <= 0:
+            raise ValueError("scallop_height must be positive")
+        kappa_u, kappa_v = self._estimate_curvatures()
+        kappa_max = max(kappa_u, kappa_v)
+        if kappa_max < 1e-12:
+            return float("inf")
+        return 2.0 * math.sqrt(2.0 * scallop_height / kappa_max)
 
     def normal_at_closest(self, point: Vector3) -> Vector3:
         """Get surface normal at the point on the surface closest to the given point."""

@@ -1066,3 +1066,30 @@ On reimport (same or revised file), a **re-match pass** compares stored fingerpr
 - CLAUDE.md tech targets — `three-mesh-bvh` is already listed for collision detection
 
 ---
+
+### 24. Node palette — add-node menu at the top of the node graph canvas (DONE))
+
+**What was requested:** A menu bar along the top of the node graph view listing all available node types, organised into sections, that users can either click to add a node to the canvas or drag onto a specific position.
+
+**Scope:**
+
+*Menu bar (top of `NodeGraphPanel.jsx`):*
+- A fixed horizontal bar above the React Flow canvas with labelled section groups — e.g. **Geometry**, **Strategy**, **Orientation**, **Post**.
+- Each section is a dropdown or expandable group containing every node type in that category (e.g. Geometry → STEP Import, Geometry Input; Strategy → Follow Curve, Raster Fill, Contour Parallel; Orientation → to\_normal, fixed, lead, lag, side\_tilt, avoid\_collision; Post → Post Processor).
+- Clicking a node type creates that node and places it at the centre of the current canvas viewport.
+- Dragging a node type from the palette and dropping it on the canvas places it at the drop position (use React Flow's `onDrop` / `onDragOver` API with `reactFlowInstance.screenToFlowPosition()`).
+
+*Node creation helpers (`graphStore.js`):*
+- A `addNodeOfType(type, position)` action that creates the correct default node shape (reusing the existing `make*Node` factory functions) and appends it to `nodes`.
+- The position defaults to the current viewport centre if not supplied.
+
+*Node registry:*
+- A `NODE_REGISTRY` constant (can live in `graphStore.js` or a new `nodeRegistry.js`) that lists every creatable node type with: `{ type, label, section, makeNode }`. This is the single source of truth the palette reads — adding a new node type only requires adding an entry here.
+
+**Files likely touched:**
+- `utde-app/src/components/NodeGraph/NodeGraphPanel.jsx` — add palette bar, wire `onDrop`/`onDragOver`
+- `utde-app/src/store/graphStore.js` — `addNodeOfType` action, `NODE_REGISTRY`
+- `utde-app/src/components/NodeGraph/NodePalette.jsx` — new component for the palette bar
+- `utde-app/src/__tests__/store/graphStore.test.js` — test `addNodeOfType` places correct node
+
+---
