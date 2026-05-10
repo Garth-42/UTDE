@@ -9,7 +9,7 @@ Install dependencies:
 
 Run standalone (browser dev mode):
     python step_server.py                 # defaults to port 5174
-    python step_server.py --port 5174
+    python step_server.py --reload        # auto-reload on any .py file change
 
 Run as Tauri sidecar (port assigned by Tauri):
     ./utde-server --port <dynamic-port>
@@ -42,8 +42,14 @@ def _apply_cors(flask_app):
         _CORS(flask_app, origins="*")
 
 
-def _extract_boundary_loop(vertices_flat, indices_flat):
-    """Return the outer boundary loop of a triangle mesh as a list of (x,y,z) tuples."""
+def _extract_all_boundary_loops(vertices_flat, indices_flat):
+    """
+    Return all boundary loops of a triangle mesh as a list of loops, where each
+    loop is a list of (x,y,z) tuples.  Boundary edges are those shared by only
+    one triangle.  Multiple disconnected loops occur when the face has holes.
+    The first element of the returned list is the outer (largest-area) loop;
+    subsequent elements are interior hole loops.
+    """
     if not vertices_flat or not indices_flat:
         return []
 
@@ -67,22 +73,41 @@ def _extract_boundary_loop(vertices_flat, indices_flat):
         adj.setdefault(a, []).append(b)
         adj.setdefault(b, []).append(a)
 
-    start = next(iter(adj))
-    loop = [start]
-    prev = None
-    current = start
-    for _ in range(len(adj)):
-        neighbors = [n for n in adj[current] if n != prev]
-        if not neighbors:
-            break
-        nxt = neighbors[0]
-        if nxt == start:
-            break
-        loop.append(nxt)
-        prev = current
-        current = nxt
+    # Walk all disconnected loops
+    unvisited = set(adj)
+    loops = []
+    while unvisited:
+        start = next(iter(unvisited))
+        loop = [start]
+        unvisited.discard(start)
+        prev, current = None, start
+        for _ in range(len(adj)):
+            neighbors = [n for n in adj[current] if n != prev]
+            if not neighbors:
+                break
+            nxt = neighbors[0]
+            if nxt == start:
+                break
+            loop.append(nxt)
+            unvisited.discard(nxt)
+            prev, current = current, nxt
+        loops.append([verts[i] for i in loop])
 
-    return [verts[i] for i in loop]
+    if not loops:
+        return []
+
+    # Outer loop = largest signed-area polygon (projected onto XY plane as proxy)
+    def _signed_area_xy(loop):
+        n = len(loop)
+        a = 0.0
+        for i in range(n):
+            x1, y1 = loop[i][0], loop[i][1]
+            x2, y2 = loop[(i + 1) % n][0], loop[(i + 1) % n][1]
+            a += x1 * y2 - x2 * y1
+        return abs(a) / 2.0
+
+    loops.sort(key=_signed_area_xy, reverse=True)
+    return loops
 
 MAX_FILE_BYTES = 200 * 1024 * 1024  # 200 MB
 SCRIPT_TIMEOUT = 30  # seconds
@@ -92,7 +117,8 @@ try:
     from OCC.Core.IFSelect import IFSelect_RetDone
     from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
     from OCC.Core.TopExp import TopExp_Explorer
-    from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
+    from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_WIRE
+    from OCC.Core.BRepTools import breptools_OuterWire
     from OCC.Core.BRep import BRep_Tool
     from OCC.Core.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
     from OCC.Core.GeomAbs import (
@@ -127,6 +153,35 @@ if OCC_AVAILABLE:
         GeomAbs_BezierCurve: "bezier",
         GeomAbs_BSplineCurve:"bspline",
     }
+
+
+# ── Wire sampling ─────────────────────────────────────────────────────────────
+
+def _sample_wire_3d(wire, num_points_per_edge=32):
+    """Sample all edges of a wire into a flat list of [x,y,z] points."""
+    pts = []
+    edge_exp = TopExp_Explorer(wire, TopAbs_EDGE)
+    seen_start = None
+    while edge_exp.More():
+        edge = edge_exp.Current()
+        try:
+            adaptor = BRepAdaptor_Curve(edge)
+            t_min = adaptor.FirstParameter()
+            t_max = adaptor.LastParameter()
+            sampler = GCPnts_UniformAbscissa()
+            sampler.Initialize(adaptor, num_points_per_edge, t_min, t_max)
+            if sampler.IsDone():
+                edge_pts = []
+                for i in range(1, sampler.NbPoints() + 1):
+                    p = adaptor.Value(sampler.Parameter(i))
+                    edge_pts.append([p.X(), p.Y(), p.Z()])
+                # Skip first point of subsequent edges to avoid duplicates at junctions
+                pts.extend(edge_pts if seen_start is None else edge_pts[1:])
+                seen_start = True
+        except Exception:
+            pass
+        edge_exp.Next()
+    return pts
 
 
 # ── Face tessellation ──────────────────────────────────────────────────────────
@@ -219,6 +274,24 @@ def tessellate_face(face, idx):
         coords = verts_np.reshape(-1, 3)
         centroid = coords.mean(axis=0)
         result["centroid"] = centroid.tolist()
+
+    # Extract inner wires (holes) directly from OCC topology — far more reliable
+    # than inferring them from the tessellation's boundary edges.
+    try:
+        outer_wire = breptools_OuterWire(face)
+        inner_loops = []
+        wire_exp = TopExp_Explorer(face, TopAbs_WIRE)
+        while wire_exp.More():
+            wire = wire_exp.Current()
+            if not wire.IsSame(outer_wire):
+                pts = _sample_wire_3d(wire)
+                if len(pts) >= 3:
+                    inner_loops.append(pts)
+            wire_exp.Next()
+        if inner_loops:
+            result["inner_loops"] = inner_loops
+    except Exception:
+        pass
 
     return result
 
@@ -448,16 +521,25 @@ def generate_toolpath():
             except Exception:
                 pass
 
-        # Attach boundary loops so raster fill can clip to the actual surface edge
+        # Attach boundary loops so raster fill can clip to the actual surface edge.
+        # Outer boundary: inferred from mesh topology (boundary edges).
+        # Inner loops (holes): read directly from OCC wire topology extracted during
+        # parse-step — this is authoritative; the mesh-topology fallback is unreliable.
         for face in selected_faces:
             fid = face.get("id")
             if fid in surfaces:
-                boundary = _extract_boundary_loop(
+                all_loops = _extract_all_boundary_loops(
                     face.get("vertices", []),
                     face.get("indices", []),
                 )
-                if boundary:
-                    surfaces[fid].boundary_loop = boundary
+                if all_loops:
+                    surfaces[fid].boundary_loop = all_loops[0]
+                # Inner loops from OCC wire topology (preferred over mesh inference)
+                inner_loops = face.get("inner_loops")
+                if inner_loops:
+                    surfaces[fid].interior_loops = [
+                        [tuple(p) for p in loop] for loop in inner_loops
+                    ]
 
         curves = {}
         for edge in selected_edges:
@@ -497,36 +579,47 @@ def generate_toolpath():
                 if not curves:
                     gen_error = f"follow_curve requires at least one edge — {len(curves)} edges received"
                 else:
-                    curve = next(iter(curves.values()))
                     paths = FollowCurveStrategy().generate(
-                        curve=curve,
+                        curves=list(curves.values()),
                         feed_rate=feed_rate,
                         spacing=float(strategy_cfg.get("spacing", 1.0)),
                         path_type=strategy_cfg.get("path_type", "deposit"),
+                        chain=bool(strategy_cfg.get("chain", False)),
+                        normal_offset=float(strategy_cfg.get("normal_offset", 0.0)),
+                        inset=float(strategy_cfg.get("edge_inset", 0.0)),
                     )
             elif stype == "raster_fill":
-                if not surfaces:
-                    gen_error = f"raster_fill requires at least one face — {len(surfaces)} faces parsed (sent {len(selected_faces)})"
-                else:
+                raster_kwargs = dict(
+                    spacing=float(strategy_cfg.get("spacing", 3.0)),
+                    angle=float(strategy_cfg.get("angle", 0.0)),
+                    feed_rate=feed_rate,
+                    normal_offset=float(strategy_cfg.get("normal_offset", 0.0)),
+                    edge_inset=float(strategy_cfg.get("edge_inset", 0.0)),
+                    respect_interior_boundaries=bool(strategy_cfg.get("respect_interior_boundaries", True)),
+                )
+                if strategy_cfg.get("chord_tolerance") is not None:
+                    raster_kwargs["chord_tolerance"] = float(strategy_cfg["chord_tolerance"])
+                if strategy_cfg.get("scallop_height") is not None:
+                    raster_kwargs["scallop_height"] = float(strategy_cfg["scallop_height"])
+                if surfaces:
                     surface = next(iter(surfaces.values()))
-                    paths = RasterFillStrategy().generate(
-                        surface=surface,
-                        spacing=float(strategy_cfg.get("spacing", 3.0)),
-                        angle=float(strategy_cfg.get("angle", 0.0)),
-                        feed_rate=feed_rate,
-                        normal_offset=float(strategy_cfg.get("normal_offset", 0.0)),
-                        edge_inset=float(strategy_cfg.get("edge_inset", 0.0)),
-                    )
+                    paths = RasterFillStrategy().generate(surface=surface, **raster_kwargs)
+                elif curves:
+                    paths = RasterFillStrategy().generate(curves=list(curves.values()), **raster_kwargs)
+                else:
+                    gen_error = "raster_fill requires at least one face or a closed edge loop"
             elif stype == "contour_parallel":
-                boundary = next(iter(curves.values()), None)
-                if not boundary:
+                if not curves:
                     gen_error = "contour_parallel requires at least one edge as boundary"
                 else:
                     paths = ContourParallelStrategy().generate(
-                        boundary=boundary,
+                        boundaries=list(curves.values()),
                         stepover=float(strategy_cfg.get("stepover", 3.0)),
                         num_passes=int(strategy_cfg.get("num_passes", 4)),
                         feed_rate=feed_rate,
+                        chain=bool(strategy_cfg.get("chain", True)),
+                        normal_offset=float(strategy_cfg.get("normal_offset", 0.0)),
+                        inset=float(strategy_cfg.get("edge_inset", 0.0)),
                     )
             else:
                 gen_error = f"Unknown strategy type: '{stype}'"
@@ -597,7 +690,8 @@ def generate_toolpath():
                 points.append({
                     "x": pt.position.x, "y": pt.position.y, "z": pt.position.z,
                     "nx": o.i if o else 0, "ny": o.j if o else 0, "nz": o.k if o else -1,
-                    "feed_rate":     pt.feed_rate,
+                    "feed_rate":      pt.feed_rate,
+                    "path_type":      pt.path_type,
                     "process_params": pt.process_params,
                 })
 
@@ -769,6 +863,11 @@ if __name__ == "__main__":
         "--no-cors", action="store_true",
         help="Disable CORS headers (used when running as Tauri sidecar).",
     )
+    parser.add_argument(
+        "--reload", action="store_true",
+        help="Enable Werkzeug auto-reloader (dev mode). Watches all .py files and "
+             "restarts the server automatically on change. Do not use with Tauri.",
+    )
     args = parser.parse_args()
 
     if not args.no_cors:
@@ -776,12 +875,24 @@ if __name__ == "__main__":
 
     print(f"UTDE STEP Server → http://localhost:{args.port}")
     print(f"pythonocc-core: {'available' if OCC_AVAILABLE else 'NOT FOUND'}")
-    # Flush so Tauri's sidecar stdout reader sees it immediately
     sys.stdout.flush()
 
-    # Use Werkzeug's make_server so we can print the ready signal *after*
-    # the socket is bound (before app.run() would print it).
-    from werkzeug.serving import make_server
-    srv = make_server("127.0.0.1", args.port, app, threaded=True)
-    print("UTDE_SERVER_READY", flush=True)
-    srv.serve_forever()
+    if args.reload:
+        # Dev mode: Werkzeug reloader watches all .py files and restarts on change.
+        # The ready signal is printed before serve_forever so the log always shows it,
+        # even after auto-reloads (the reloader re-execs this script on each reload).
+        from werkzeug.serving import make_server
+        from werkzeug._reloader import run_with_reloader
+
+        def _serve():
+            srv = make_server("127.0.0.1", args.port, app, threaded=True)
+            print("UTDE_SERVER_READY", flush=True)
+            srv.serve_forever()
+
+        run_with_reloader(_serve)
+    else:
+        # Production / Tauri sidecar: single process, no file watching.
+        from werkzeug.serving import make_server
+        srv = make_server("127.0.0.1", args.port, app, threaded=True)
+        print("UTDE_SERVER_READY", flush=True)
+        srv.serve_forever()

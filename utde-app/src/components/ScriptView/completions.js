@@ -78,13 +78,13 @@ const ORIENT_RULES = [
 
 const STRATEGY_SNIPPETS = [
   s("FollowCurveStrategy",
-    "FollowCurveStrategy().generate(\n    curve=${curve},\n    feed_rate=${600},\n    spacing=${1.0},\n    path_type=\"${cut}\",\n)",
+    "FollowCurveStrategy().generate(\n    curve=${curve},\n    feed_rate=${600},\n    spacing=${1.0},\n    path_type=\"${cut}\",\n    chain=${True},\n    normal_offset=${0.0},\n    inset=${0.0},\n)",
     "Follow a curve at constant feed rate"),
   s("RasterFillStrategy",
-    "RasterFillStrategy().generate(\n    surface=${surface},\n    spacing=${2.0},\n    feed_rate=${600},\n    angle=${0},\n    zigzag=${True},\n)",
-    "Raster scan fill over a surface"),
+    "RasterFillStrategy().generate(\n    surface=${surface},\n    spacing=${2.0},\n    feed_rate=${600},\n    angle=${0},\n    zigzag=${True},\n    respect_interior_boundaries=${True},\n    chord_tolerance=${0.1},\n    scallop_height=${0.05},\n)",
+    "Raster scan fill over a surface or closed edge loop"),
   s("ContourParallelStrategy",
-    "ContourParallelStrategy().generate(\n    boundary=${boundary},\n    stepover=${3.0},\n    num_passes=${4},\n    feed_rate=${600},\n)",
+    "ContourParallelStrategy().generate(\n    boundary=${boundary},\n    stepover=${3.0},\n    num_passes=${4},\n    feed_rate=${600},\n    chain=${True},\n    normal_offset=${0.0},\n    inset=${0.0},\n)",
     "Contour-parallel offset passes"),
 ];
 

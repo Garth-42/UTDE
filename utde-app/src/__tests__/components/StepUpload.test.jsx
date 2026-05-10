@@ -25,7 +25,7 @@ vi.mock("../../utils/session", () => ({
 }));
 
 vi.mock("../../components/styles", () => ({
-  S: { sectionLabel: {}, btn: {} },
+  S: { sectionLabel: {}, btn: {}, row: () => ({}) },
 }));
 
 import { parseStep } from "../../api/client";
@@ -62,8 +62,8 @@ describe("StepUpload (browser mode)", () => {
     render(<StepUpload />);
     const slider = screen.getByRole("slider");
     expect(slider).toBeInTheDocument();
-    expect(slider).toHaveAttribute("min", "0.1");
-    expect(slider).toHaveAttribute("max", "2");
+    expect(slider).toHaveAttribute("min", "1");
+    expect(slider).toHaveAttribute("max", "10");
   });
 
   it("displays fileName from store when set", () => {
@@ -151,8 +151,8 @@ describe("StepUpload (browser mode)", () => {
   it("quality slider updates value display", async () => {
     render(<StepUpload />);
     const slider = screen.getByRole("slider");
-    fireEvent.change(slider, { target: { value: "1.5" } });
-    expect(screen.getByText("1.5")).toBeInTheDocument();
+    fireEvent.change(slider, { target: { value: "7" } });
+    expect(screen.getByText("Fine")).toBeInTheDocument();
   });
 
   it("drag over changes visual state", () => {
