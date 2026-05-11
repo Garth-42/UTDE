@@ -36,6 +36,18 @@ except ImportError:
 
 app = Flask(__name__)
 
+# Eagerly import the built-in templates so the @process decorators register
+# them in the toolpath_engine registry. The /templates endpoint and the future
+# /compile-timeline endpoint both depend on this. Optional — server still
+# starts if the library is missing (toolpath_engine endpoints will 500 instead).
+try:
+    import toolpath_engine.templates  # noqa: F401  (import-for-side-effect)
+    _TEMPLATES_LOADED = True
+except Exception as _e:                 # pragma: no cover — defensive
+    _TEMPLATES_LOADED = False
+    _TEMPLATES_LOAD_ERROR = str(_e)
+
+
 def _apply_cors(flask_app):
     """Apply CORS headers for development. Allows all origins (local server only)."""
     if _CORS_AVAILABLE:
@@ -308,6 +320,116 @@ def health():
     return jsonify({"ok": True, "occ_available": OCC_AVAILABLE})
 
 
+MACHINES_DIR = os.path.join(os.path.dirname(__file__), "machines")
+
+
+def _summarize_machine_yaml(yaml_path):
+    """Return a UI-friendly summary of a machine YAML file, or None on failure."""
+    try:
+        import yaml as _yaml
+        with open(yaml_path) as f:
+            data = _yaml.safe_load(f.read()) or {}
+        tool = data.get("tool_chain") or []
+        wp   = data.get("workpiece_chain") or []
+        return {
+            "id":              os.path.splitext(os.path.basename(yaml_path))[0],
+            "name":            data.get("name") or os.path.splitext(os.path.basename(yaml_path))[0],
+            "path":            os.path.relpath(yaml_path, os.path.dirname(__file__)),
+            "tool_axes":       [j.get("name") for j in tool],
+            "workpiece_axes":  [j.get("name") for j in wp],
+            "axis_count":      len(tool) + len(wp),
+            "description":     data.get("description"),
+        }
+    except Exception as exc:                             # pragma: no cover — diagnostic
+        return {
+            "id":    os.path.splitext(os.path.basename(yaml_path))[0],
+            "name":  os.path.basename(yaml_path),
+            "path":  os.path.relpath(yaml_path, os.path.dirname(__file__)),
+            "error": str(exc),
+        }
+
+
+@app.route("/machines")
+def machines():
+    """Enumerate every machine YAML in machines/. The current Forgepath shell
+    treats this list as the picker contents; legacy factory presets remain
+    available via /compile-timeline as a fallback when machines/ is empty."""
+    if not os.path.isdir(MACHINES_DIR):
+        return jsonify({"machines": []})
+    out = []
+    for name in sorted(os.listdir(MACHINES_DIR)):
+        if not name.lower().endswith((".yaml", ".yml")):
+            continue
+        out.append(_summarize_machine_yaml(os.path.join(MACHINES_DIR, name)))
+    return jsonify({"machines": out})
+
+
+@app.route("/machines/import", methods=["POST"])
+def machines_import():
+    """Upload a machine YAML, validate it parses, save into machines/. Body
+    may be either a multipart `file` upload or a JSON `{name, yaml}` payload."""
+    yaml_text = None
+    target_name = None
+
+    if "file" in request.files:
+        f = request.files["file"]
+        if not f.filename.lower().endswith((".yaml", ".yml")):
+            return jsonify({"error": "File must be .yaml or .yml"}), 400
+        yaml_text = f.read().decode("utf-8", errors="replace")
+        target_name = os.path.splitext(os.path.basename(f.filename))[0]
+    else:
+        try:
+            data = request.get_json(force=True) or {}
+        except Exception:
+            data = {}
+        yaml_text = data.get("yaml")
+        target_name = data.get("name") or data.get("id")
+        if not yaml_text:
+            return jsonify({"error": "Provide a multipart `file` or JSON {name, yaml}"}), 400
+
+    utde_path = os.path.join(os.path.dirname(__file__), "utde_v0.1.0")
+    if utde_path not in sys.path:
+        sys.path.insert(0, utde_path)
+    try:
+        from toolpath_engine import Machine
+        machine = Machine.from_yaml(yaml_text)
+    except Exception as exc:
+        return jsonify({"error": f"Invalid machine YAML: {exc}"}), 400
+
+    # File name: prefer the explicit name, else the machine's `name` field,
+    # else fall back to a slug of the supplied filename.
+    safe = (target_name or machine.name or "machine").strip()
+    safe = "".join(c if (c.isalnum() or c in "_-") else "_" for c in safe).strip("_")
+    if not safe:
+        safe = "machine"
+
+    os.makedirs(MACHINES_DIR, exist_ok=True)
+    out_path = os.path.join(MACHINES_DIR, f"{safe}.yaml")
+    with open(out_path, "w") as f:
+        f.write(yaml_text)
+
+    return jsonify({
+        "machine": _summarize_machine_yaml(out_path),
+    })
+
+
+@app.route("/templates")
+def templates():
+    """Return UI-shaped metadata for every registered process template.
+
+    Consumed by the front-end Operation Library. Each entry exposes the
+    template's id, label, kind tag, icon key, geometry-slot requirements,
+    parameter schema, and rough cycle/volume estimates.
+    """
+    if not _TEMPLATES_LOADED:
+        return jsonify({
+            "error": "toolpath_engine templates failed to load",
+            "detail": _TEMPLATES_LOAD_ERROR,
+        }), 500
+    from toolpath_engine import list_processes
+    return jsonify({"templates": list_processes()})
+
+
 @app.route("/parse-step", methods=["POST"])
 def parse_step():
     if not OCC_AVAILABLE:
@@ -387,6 +509,374 @@ def parse_step():
             os.unlink(tmp_path)
         except Exception:
             pass
+
+
+def _resolve_machine(machine_id, MachineCls):
+    """Resolve a request `machine` field to a Machine instance.
+
+    Order:
+      1. A `machines/<id>.yaml` file (id may carry a `.yaml` suffix or not).
+      2. A `Machine.<id>()` classmethod factory.
+      3. The `gantry_5axis_ac` factory as a default.
+    """
+    if machine_id:
+        candidate = machine_id
+        if candidate.lower().endswith((".yaml", ".yml")):
+            candidate = os.path.splitext(candidate)[0]
+        yaml_path = os.path.join(MACHINES_DIR, f"{candidate}.yaml")
+        if os.path.isfile(yaml_path):
+            with open(yaml_path) as f:
+                return MachineCls.from_yaml(f.read())
+
+        factory = getattr(MachineCls, machine_id, None)
+        if callable(factory):
+            try:
+                return factory()
+            except Exception:
+                pass
+
+    return MachineCls.gantry_5axis_ac()
+
+
+def _build_geometry_dicts(selected_faces, selected_edges):
+    """Construct {face_id: Surface} and {edge_id: Curve} dicts the same way
+    /generate-toolpath does, plus boundary loops for face raster fill."""
+    from toolpath_engine.core.geometry import Curve, Surface
+
+    surfaces = {}
+    for face in selected_faces:
+        p = face.get("params", {})
+        ftype = face.get("type")
+        fid   = face.get("id")
+        try:
+            if ftype == "cylinder" and "center" in p and "radius" in p:
+                surfaces[fid] = Surface.cylinder(
+                    center=tuple(p["center"]),
+                    axis=tuple(p.get("axis", [0, 0, 1])),
+                    radius=p["radius"],
+                    height=p.get("height") or 100.0,
+                    name=f"face_{fid}",
+                )
+            elif ftype == "plane" and "origin" in p and "normal" in p:
+                surfaces[fid] = Surface.plane(
+                    origin=tuple(p["origin"]),
+                    normal=tuple(p["normal"]),
+                    name=f"face_{fid}",
+                )
+            elif ftype == "sphere" and "center" in p and "radius" in p:
+                surfaces[fid] = Surface.sphere(
+                    center=tuple(p["center"]),
+                    radius=p["radius"],
+                    name=f"face_{fid}",
+                )
+        except Exception:
+            pass
+
+    for face in selected_faces:
+        fid = face.get("id")
+        if fid in surfaces:
+            boundary = _extract_boundary_loop(
+                face.get("vertices", []),
+                face.get("indices", []),
+            )
+            if boundary:
+                surfaces[fid].boundary_loop = boundary
+
+    curves = {}
+    for edge in selected_edges:
+        p     = edge.get("params", {})
+        etype = edge.get("type")
+        eid   = edge.get("id")
+        try:
+            if etype == "circle" and "center" in p and "radius" in p:
+                curves[eid] = Curve.circle(
+                    center=tuple(p["center"]),
+                    radius=p["radius"],
+                    num_points=64,
+                )
+            elif etype == "line" and "start" in p and "end" in p:
+                curves[eid] = Curve.line(
+                    start=tuple(p["start"]),
+                    end=tuple(p["end"]),
+                    num_points=50,
+                )
+            elif edge.get("vertices"):
+                verts = edge["vertices"]
+                pts   = [(verts[i], verts[i+1], verts[i+2])
+                         for i in range(0, len(verts), 3)]
+                if len(pts) >= 2:
+                    curves[eid] = Curve.spline(
+                        control_points=pts,
+                        num_points=max(50, len(pts)),
+                    )
+        except Exception:
+            pass
+
+    return surfaces, curves
+
+
+def _build_orient_callable(rule_cfg, surface_for_to_normal=None, machine_obj=None):
+    """Map a JSON orient rule config to a Python orient callable. Returns
+    None if the rule type is unsupported in the current context (e.g.
+    to_normal with no surface). Used by /compile-timeline."""
+    from toolpath_engine.orient import (
+        to_normal, fixed, lead, lag, side_tilt, avoid_collision,
+    )
+
+    t = rule_cfg.get("type") or rule_cfg.get("rule")
+    if t == "fixed":
+        # Front-end uses x/y/z; legacy /generate-toolpath uses i/j/k.
+        i = rule_cfg.get("x", rule_cfg.get("i", 0))
+        j = rule_cfg.get("y", rule_cfg.get("j", 0))
+        k = rule_cfg.get("z", rule_cfg.get("k", -1))
+        return fixed(i, j, k)
+    if t == "lead":
+        return lead(float(rule_cfg.get("angle", rule_cfg.get("angle_deg", 10))))
+    if t == "lag":
+        return lag(float(rule_cfg.get("angle", rule_cfg.get("angle_deg", 5))))
+    if t == "side_tilt":
+        return side_tilt(float(rule_cfg.get("angle", rule_cfg.get("angle_deg", 5))))
+    if t == "to_normal":
+        if surface_for_to_normal is not None:
+            return to_normal(surface_for_to_normal)
+        return None
+    if t == "avoid_collision":
+        return avoid_collision(machine_obj, max_tilt=float(rule_cfg.get("max_tilt", 20)))
+    return None
+
+
+@app.route("/compile-timeline", methods=["POST"])
+def compile_timeline():
+    """Walk the timeline of ops + orient rows into a single ToolpathCollection
+    plus G-code grouped by op.
+
+    Per Q3(c-entry) + append-mode: each visible orient row sets the active
+    orient chain for every op below it (until the next visible orient row).
+    Each op's template is invoked with its picked geometry and parameters,
+    then the active chain is applied *on top of* whatever orient defaults
+    the template returned.
+
+    Body:
+        {
+          "entries": [
+            { "kind": "op",     "templateId", "name", "params", "geometry": [[ids...], ...],
+              "visible": true },
+            { "kind": "orient", "rules": [...], "visible": true },
+            ...
+          ],
+          "faces":    [...],   // same shape as /generate-toolpath
+          "edges":    [...],
+          "machine":  "gantry_5axis_ac",
+          "workspace_origin": { x, y, z } | null,
+        }
+
+    Returns:
+        {
+          "points":      [...],   // serialized toolpath points (concatenated)
+          "point_count": int,
+          "gcode":       str,     // with `(--- OP NN NAME ---)` dividers
+          "op_ranges":   [{ idx, name, templateId, kind,
+                            point_start, point_end,
+                            gcode_start_line, gcode_end_line }],
+          "warnings":    [str],
+        }
+    """
+    if not _TEMPLATES_LOADED:
+        return jsonify({
+            "error": "toolpath_engine templates failed to load",
+            "detail": _TEMPLATES_LOAD_ERROR,
+        }), 500
+
+    try:
+        data           = request.get_json(force=True)
+        entries        = data.get("entries", []) or []
+        selected_faces = data.get("faces", []) or []
+        selected_edges = data.get("edges", []) or []
+        machine_preset = data.get("machine", "gantry_5axis_ac")
+        workspace_origin = data.get("workspace_origin")
+
+        utde_path = os.path.join(os.path.dirname(__file__), "utde_v0.1.0")
+        if utde_path not in sys.path:
+            sys.path.insert(0, utde_path)
+
+        from toolpath_engine import get_process, list_processes
+        from toolpath_engine.core.toolpath import Toolpath, ToolpathCollection
+        from toolpath_engine.core.primitives import Vector3
+        from toolpath_engine.kinematics import Machine
+        from toolpath_engine.post import PostProcessor
+
+        templates_by_id = {t["id"]: t for t in list_processes()}
+        surfaces, curves = _build_geometry_dicts(selected_faces, selected_edges)
+
+        machine_obj = _resolve_machine(machine_preset, Machine)
+
+        active_chain = []                # rules from the most-recent visible orient row
+        combined     = ToolpathCollection(name="timeline")
+        op_ranges    = []
+        warnings     = []
+
+        for idx, entry in enumerate(entries):
+            if not entry.get("visible", True):
+                continue
+            kind = entry.get("kind")
+
+            if kind == "orient":
+                active_chain = list(entry.get("rules", []))
+                continue
+
+            if kind == "scene":
+                # Scene rows are imperative actions on the live geometry
+                # (load STEP / clear) and don't produce toolpaths. Their
+                # effects are already baked into the `faces` / `edges`
+                # payload by the time /compile-timeline is called.
+                continue
+
+            if kind != "op":
+                warnings.append(f"entry {idx}: unknown kind '{kind}'")
+                continue
+
+            tpl_id = entry.get("templateId")
+            try:
+                fn = get_process(tpl_id)
+            except KeyError:
+                warnings.append(f"entry {idx}: unknown template '{tpl_id}'")
+                continue
+
+            # Resolve picked geometry IDs into Surface/Curve objects, slot by slot
+            resolved = []
+            first_surface = None
+            for slot_picks in entry.get("geometry", []) or []:
+                slot = []
+                for gid in slot_picks:
+                    if gid in surfaces:
+                        slot.append(surfaces[gid])
+                        if first_surface is None:
+                            first_surface = surfaces[gid]
+                    elif gid in curves:
+                        slot.append(curves[gid])
+                resolved.append(slot)
+
+            try:
+                op_collection = fn(
+                    model=None,
+                    geometry=resolved,
+                    params=entry.get("params", {}) or {},
+                )
+            except TypeError:
+                # Older template signatures: fn(model, params) only
+                try:
+                    op_collection = fn(model=None, params=entry.get("params", {}) or {})
+                except Exception as exc:
+                    warnings.append(f"entry {idx} ({tpl_id}): {exc}")
+                    continue
+            except Exception as exc:
+                warnings.append(f"entry {idx} ({tpl_id}): {exc}")
+                continue
+
+            # Apply the active orient chain ON TOP OF the template default.
+            for rule_cfg in active_chain:
+                rule = _build_orient_callable(
+                    rule_cfg,
+                    surface_for_to_normal=first_surface,
+                    machine_obj=machine_obj,
+                )
+                if rule is not None:
+                    try:
+                        op_collection.orient(rule)
+                    except Exception as exc:
+                        warnings.append(
+                            f"entry {idx}: orient rule '{rule_cfg.get('type')}' "
+                            f"could not be applied — {exc}"
+                        )
+
+            point_start = sum(len(tp.points) for tp in combined.toolpaths)
+            for tp in op_collection.toolpaths:
+                combined.add(tp)
+            point_end = sum(len(tp.points) for tp in combined.toolpaths)
+
+            tpl_meta = templates_by_id.get(tpl_id, {})
+            op_ranges.append({
+                "idx":         idx,
+                "uid":         entry.get("uid"),
+                "name":        entry.get("name") or tpl_id,
+                "templateId":  tpl_id,
+                "kind":        tpl_meta.get("kind"),
+                "point_start": point_start,
+                "point_end":   point_end,
+            })
+
+        # Apply workspace origin offset (in-place, before G-code generation)
+        if workspace_origin:
+            ox = float(workspace_origin.get("x", 0))
+            oy = float(workspace_origin.get("y", 0))
+            oz = float(workspace_origin.get("z", 0))
+            for tp in combined.toolpaths:
+                for pt in tp.points:
+                    pt.position = Vector3(
+                        pt.position.x - ox,
+                        pt.position.y - oy,
+                        pt.position.z - oz,
+                    )
+
+        # Per-op G-code with section dividers and line-range tracking
+        post = PostProcessor(machine_obj)
+        gcode_lines = []
+
+        # Walk the same op_ranges to slice the combined collection back into per-op chunks.
+        # We reproduce per-op slices because PostProcessor takes a ToolpathCollection.
+        op_idx_to_toolpaths = []
+        running = 0
+        for op_range in op_ranges:
+            chunk = ToolpathCollection(name=f"op_{op_range['idx']}")
+            # The toolpaths added for this op are the next (point_end - point_start)
+            # points worth of toolpaths in the combined collection. We tracked
+            # contiguous insertion order, so we can rebuild via offset.
+            target_count = op_range["point_end"] - op_range["point_start"]
+            collected = 0
+            while running < len(combined.toolpaths) and collected < target_count:
+                tp = combined.toolpaths[running]
+                chunk.add(tp)
+                collected += len(tp.points)
+                running += 1
+            op_idx_to_toolpaths.append(chunk)
+
+        for op_range, chunk in zip(op_ranges, op_idx_to_toolpaths):
+            gcode_start = len(gcode_lines)
+            divider = f"(--- OP {op_range['idx']+1:02d}  {op_range['name']} ---)"
+            gcode_lines.append(divider)
+            try:
+                sub_gcode = post.process(chunk, resolve_ik=False)
+                gcode_lines.extend(sub_gcode.split("\n"))
+            except Exception as exc:
+                warnings.append(f"op {op_range['idx']} G-code: {exc}")
+            op_range["gcode_start_line"] = gcode_start
+            op_range["gcode_end_line"]   = len(gcode_lines)
+
+        gcode = "\n".join(gcode_lines)
+
+        # Serialize points
+        points = []
+        for tp in combined.toolpaths:
+            for pt in tp.points:
+                o = pt.orientation
+                points.append({
+                    "x": pt.position.x, "y": pt.position.y, "z": pt.position.z,
+                    "nx": o.i if o else 0, "ny": o.j if o else 0, "nz": o.k if o else -1,
+                    "feed_rate":     pt.feed_rate,
+                    "path_type":     pt.path_type,
+                    "process_params": pt.process_params,
+                })
+
+        return jsonify({
+            "points":      points,
+            "point_count": len(points),
+            "gcode":       gcode,
+            "op_ranges":   op_ranges,
+            "warnings":    warnings,
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"compile-timeline error: {e}"}), 500
 
 
 @app.route("/generate-toolpath", methods=["POST"])

@@ -1066,3 +1066,83 @@ On reimport (same or revised file), a **re-match pass** compares stored fingerpr
 - CLAUDE.md tech targets — `three-mesh-bvh` is already listed for collision detection
 
 ---
+
+### 24. Visual machine builder — drag-and-drop joints and links (NOT STARTED)
+
+**Why:** The TopBar machine pill currently opens nothing — the picker UX is the planned-but-deferred half of Q6 from the Forgepath shell refactor. The Forgepath design ships with a picker over `machines/*.yaml` (Q6 part a — also still pending implementation). Part b is a full visual builder: drop joints onto a canvas, set their type (linear/rotary), axis, limits, and home position, optionally attach STEP collision geometry per link, and save out a new `machines/*.yaml`.
+
+**Architecture context:**
+- `utde_v0.1.0/toolpath_engine/kinematics/machine.py` already accepts joint chains as `Linear`/`Rotary` joints with axis, travel limits, and home values.
+- `machines/*.yaml` is the authoritative format — round-trippable, diffable, version-controlled per `CLAUDE.md`.
+- IK is solved automatically by the numerical solver, so the builder does not need to write a solver — just produce a valid chain definition.
+
+**Sketch:**
+- Setup tab gains a hidden subview or modal opened from the machine pill.
+- Two-column layout: chain graph on the left (joints + links as a vertical tree), per-joint inspector on the right (type, axis vector, min/max travel, home, collision-mesh STEP file).
+- "Save as" exports a YAML and registers it in a future `machineStore`.
+- An "Apply" button hot-swaps the current machine for subsequent /compile-timeline runs.
+
+**Dependencies:**
+- The machine picker (Q6 part a) should land first so machine selection is a real workflow before the builder lets users author new ones.
+- `step_server.py` needs a `/machines` endpoint that enumerates `machines/*.yaml` and a `/machines/import` for the picker.
+
+---
+
+### 25. Composed Operations as Library cards — visual builder for stacking strategies (NOT STARTED)
+
+**Why deferred:** Originally planned as part of the user-authored-operations work; deferred to keep the slice small. For now the Library exposes the three primitive strategies directly and users compose by stacking them on the timeline. A composed Operation would be a single Library card whose underlying definition is `n` strategies + an orient chain + a curated param schema — runnable as one timeline entry instead of stacking strategies manually.
+
+**Design decisions already made (from the slice-12 question round):**
+- **Q1**: Library holds both Operation cards (timeline-droppable) and Strategy cards. Strategy cards are *not* timeline-droppable; they can only be used inside an Operation.
+- **Q2**: Operations are authored via a dedicated visual builder (not save-as, not a Python editor).
+- **Q3**: A saved Operation bundles 1+ strategies + orient defaults + a param schema (the Q5(b) multi-strategy bundling pattern).
+- **Q4**: Storage is hybrid — `templates/user/*.py` on disk is canonical, with a client-side draft state during editing.
+- **Q5**: Save format is Python `.py`, written by a new server endpoint and picked up by the existing `@process` registry.
+- **Q6**: Each Library card is composed of individual strategies; the user should be able to expand the Op in the right panel and edit each strategy stage. Important params are surfaced at the top of the simplified view.
+
+**Implementation sketch:**
+- **Server**:
+  - `GET /strategies` — return metadata for every registered strategy primitive (id, label, requires, params).
+  - `POST /templates` — accept a structured definition, generate Python source via a template renderer, write `templates/user/<id>.py`, refresh the registry.
+- **Strategy metadata**: add a small decorator (e.g. `@strategy_meta(name, kind, icon, requires, params)`) attached to each existing `*Strategy` class so the front end can render Strategy cards uniformly.
+- **Library**: new "Strategies" section + new "Operations" section + the existing Scene section. Strategy cards open the builder; Operation cards drop on the timeline.
+- **Visual builder**: a dedicated drawer (TBD: full-screen vs drawer — Q8 in the design round, recommended (a)) with name field, geometry-slot editor, ordered list of strategy stages each with their own param defaults, orient chain editor, and the important-params picker (see TODO #26). Save button POSTs to `/templates`.
+- **Param editor refactor**: when an Op is active, show the curated "important params" at the top and an always-visible collapsible "Stages" section below. Each stage is a strategy with its full param set.
+- **Edit existing Ops**: pencil affordance on hover of Op Library cards; shipped templates open as read-only with a "Duplicate to user templates" action.
+
+**Key files to touch:**
+- `utde_v0.1.0/toolpath_engine/strategies/*.py` — add metadata decorator.
+- `step_server.py` — `/strategies` and `/templates` (POST) endpoints.
+- `utde-app/src/store/strategyMetaStore.js` (new), `templateBuilderStore.js` (new — draft state for the builder).
+- `utde-app/src/components/builder/` (new dir) — `OperationBuilder.jsx`, `StageList.jsx`, `SlotEditor.jsx`, etc.
+- `utde-app/src/components/setup/ParamEditorOp.jsx` — refactor for stages-expand view.
+
+**Pre-reqs / open question:**
+- The "important params" picker is its own TODO (#26 below) and should land first.
+- Decide between drawer and full-screen for the builder; the design round preferred drawer.
+
+---
+
+### 26. Form-builder for curating "important params" on an Operation (NOT STARTED)
+
+**Why deferred:** Part of the user-authored-operations stack (TODO #25), but worth calling out separately because it's a self-contained UX piece that can land independently and would also be useful for shipped templates (so future versions of e.g. `pocket.py` could mark `depth`/`stepdown`/`stepover` as "important" and tuck `feedrate`/`spindle` behind an Advanced section).
+
+**What it is:** when authoring an Operation in the visual builder, the author sees every parameter from every underlying strategy stage and marks which ones are "important" (i.e. surfaced in the curated form at the top of the param editor when the Op is in use). Non-important params still exist and are editable, but live inside the per-stage expand view.
+
+**Three options were considered (from the design round) — settled on a form-builder UI rather than auto-derive:**
+- Two-column picker or drag/drop reorder with a "hidden below this line" divider — let the author rename/relabel/reorder the important params and set their default values.
+
+**Where it would integrate:**
+- Visual builder (TODO #25) saves the curated list as `params: [...]` in the template metadata, with each entry carrying a `stage_ref` and `param_ref` pointing back to which strategy's param this is.
+- `ParamEditorOp` (existing) reads the curated list from the template and renders those fields at the top. The per-stage expand view renders the full param set from each strategy's metadata.
+
+**Implementation sketch:**
+- A `ParamCurator.jsx` component used inside the visual builder.
+- Two-column layout: left = all params across all stages, right = curated list (ordered, renameable, default-overrideable).
+- Each row in the curated list shows the `stage_ref · param_ref` origin so the author knows where the value flows.
+
+**Pre-reqs:**
+- TODO #25 (the builder itself) needs to exist first — this is a component that lives inside it.
+- Strategy metadata (TODO #25) needs to expose param schemas in a uniform shape.
+
+---

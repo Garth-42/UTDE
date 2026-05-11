@@ -55,6 +55,352 @@ class TestParseStep:
         assert "error" in body
 
 
+# ── /templates ────────────────────────────────────────────────────────────────
+
+
+class TestTemplates:
+    def test_returns_200(self, client):
+        res = client.get("/templates")
+        assert res.status_code == 200
+
+    def test_returns_array(self, client):
+        body = json.loads(client.get("/templates").data)
+        assert "templates" in body
+        assert isinstance(body["templates"], list)
+
+    def test_includes_pocket(self, client):
+        body = json.loads(client.get("/templates").data)
+        ids = [t["id"] for t in body["templates"]]
+        assert "pocket" in ids
+
+    def test_includes_strategy_primitives(self, client):
+        body = json.loads(client.get("/templates").data)
+        ids = [t["id"] for t in body["templates"]]
+        for tid in ("raster_fill", "follow_curve", "contour_parallel"):
+            assert tid in ids
+
+    def test_strategy_primitives_tagged_with_kind(self, client):
+        body = json.loads(client.get("/templates").data)
+        by_id = {t["id"]: t for t in body["templates"]}
+        for tid in ("raster_fill", "follow_curve", "contour_parallel"):
+            assert by_id[tid]["kind"] == "primitive"
+
+    def test_pocket_record_has_ui_metadata(self, client):
+        body = json.loads(client.get("/templates").data)
+        pocket = next(t for t in body["templates"] if t["id"] == "pocket")
+        assert pocket["kind"]    == "sub"
+        assert pocket["label"]   == "Pocket"
+        assert pocket["icon"]    == "pocket"
+        assert isinstance(pocket["requires"], list)
+        assert isinstance(pocket["params"],   list)
+        assert pocket["requires"][0]["type"] == "face"
+
+    def test_every_template_has_required_keys(self, client):
+        body = json.loads(client.get("/templates").data)
+        required = {"id", "name", "label", "kind", "icon",
+                    "requires", "params", "est_time", "est_volume"}
+        for t in body["templates"]:
+            assert required.issubset(t.keys()), \
+                f"missing keys for {t['id']}: {required - t.keys()}"
+
+
+# ── /machines ─────────────────────────────────────────────────────────────────
+
+
+class TestMachines:
+    def test_lists_machines_directory(self, client):
+        res = client.get("/machines")
+        assert res.status_code == 200
+        body = json.loads(res.data)
+        ids = [m["id"] for m in body["machines"]]
+        assert "generic_5axis_ac" in ids
+
+    def test_machine_record_has_expected_keys(self, client):
+        body = json.loads(client.get("/machines").data)
+        m = next(x for x in body["machines"] if x["id"] == "generic_5axis_ac")
+        for k in ("id", "name", "path", "axis_count", "tool_axes", "workpiece_axes"):
+            assert k in m
+        assert m["axis_count"] == 5
+
+    def test_import_rejects_invalid_yaml(self, client):
+        # Missing tool_chain entirely — Machine.from_dict accepts that, so
+        # we instead exercise the "no payload" failure mode.
+        res = client.post("/machines/import")
+        assert res.status_code == 400
+        assert "error" in json.loads(res.data)
+
+    def test_import_rejects_unparseable_yaml(self, client, tmp_path):
+        from io import BytesIO
+        data = {"file": (BytesIO(b":  bad: : :"), "broken.yaml")}
+        res = client.post(
+            "/machines/import",
+            data=data,
+            content_type="multipart/form-data",
+        )
+        assert res.status_code == 400
+
+    def test_import_saves_and_returns_summary(self, client, tmp_path, monkeypatch):
+        """A valid YAML should land in MACHINES_DIR and surface in /machines."""
+        import step_server
+        from io import BytesIO
+
+        # Sandbox MACHINES_DIR so the test doesn't litter the repo.
+        sandbox = tmp_path / "machines"
+        sandbox.mkdir()
+        monkeypatch.setattr(step_server, "MACHINES_DIR", str(sandbox))
+
+        yaml_blob = b"""
+name: testpick
+tool_chain:
+  - name: X
+    type: linear
+    axis: [1, 0, 0]
+    limits: [0, 500]
+    home: 0
+  - name: Z
+    type: linear
+    axis: [0, 0, 1]
+    limits: [0, 400]
+    home: 0
+"""
+        data = {"file": (BytesIO(yaml_blob), "testpick.yaml")}
+        res = client.post(
+            "/machines/import",
+            data=data,
+            content_type="multipart/form-data",
+        )
+        assert res.status_code == 200
+        m = json.loads(res.data)["machine"]
+        assert m["id"] == "testpick"
+        assert m["axis_count"] == 2
+        assert (sandbox / "testpick.yaml").exists()
+
+        # And it shows up in the list
+        listed = json.loads(client.get("/machines").data)["machines"]
+        assert any(x["id"] == "testpick" for x in listed)
+
+
+# ── /compile-timeline ─────────────────────────────────────────────────────────
+
+
+class TestCompileTimeline:
+    def _post(self, client, payload):
+        return client.post(
+            "/compile-timeline",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+    def test_empty_timeline_returns_200_with_no_points(self, client):
+        res = self._post(client, {"entries": [], "faces": [], "edges": []})
+        assert res.status_code == 200
+        body = json.loads(res.data)
+        assert body["point_count"] == 0
+        assert body["op_ranges"]   == []
+        assert body["warnings"]    == []
+
+    def test_single_op_compiles(self, client):
+        res = self._post(client, {
+            "entries": [
+                {"kind": "op", "uid": "op_1", "templateId": "pocket",
+                 "name": "Pocket A",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+            ],
+            "faces": [], "edges": [],
+        })
+        assert res.status_code == 200
+        body = json.loads(res.data)
+        assert body["point_count"] > 0
+        assert len(body["op_ranges"]) == 1
+        assert body["op_ranges"][0]["templateId"] == "pocket"
+        assert body["op_ranges"][0]["kind"]       == "sub"
+        assert "(--- OP 01" in body["gcode"]
+
+    def test_unknown_template_emits_warning(self, client):
+        res = self._post(client, {
+            "entries": [
+                {"kind": "op", "uid": "op_1", "templateId": "no-such-template",
+                 "name": "Bogus", "params": {}, "geometry": [], "visible": True},
+            ],
+            "faces": [], "edges": [],
+        })
+        body = json.loads(res.data)
+        assert any("no-such-template" in w for w in body["warnings"])
+        assert body["op_ranges"] == []
+
+    def test_hidden_entries_are_skipped(self, client):
+        res = self._post(client, {
+            "entries": [
+                {"kind": "op", "uid": "op_1", "templateId": "pocket",
+                 "name": "Hidden",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": False},
+                {"kind": "op", "uid": "op_2", "templateId": "pocket",
+                 "name": "Visible",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+            ],
+            "faces": [], "edges": [],
+        })
+        body = json.loads(res.data)
+        assert len(body["op_ranges"]) == 1
+        assert body["op_ranges"][0]["name"] == "Visible"
+
+    def test_orient_row_applies_chain_to_subsequent_ops(self, client):
+        """Q3(c-entry) + append-mode: an orient row sets the active chain
+        for ops below it; chain is applied on top of template defaults."""
+        res = self._post(client, {
+            "entries": [
+                {"kind": "op", "uid": "op_a", "templateId": "pocket",
+                 "name": "A",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+                {"kind": "orient", "uid": "or_1",
+                 "rules": [{"type": "lead", "angle": 15}],
+                 "visible": True},
+                {"kind": "op", "uid": "op_b", "templateId": "pocket",
+                 "name": "B",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+            ],
+            "faces": [], "edges": [],
+        })
+        body = json.loads(res.data)
+        assert len(body["op_ranges"]) == 2
+        a_end = body["op_ranges"][0]["point_end"]
+        b_start = body["op_ranges"][1]["point_start"]
+
+        # First op: template default fixed(0,0,-1) — no lead applied
+        first = body["points"][0]
+        assert abs(first["nz"] + 1.0) < 0.01
+        assert abs(first["nx"]) < 0.01
+
+        # Second op: lead(15°) → tilted ~sin(15°) ≈ 0.259 in travel direction
+        second = body["points"][b_start]
+        assert abs(second["nz"]) < 1.0          # no longer (0,0,-1)
+        assert abs(second["nx"]) > 0.05         # tilt is non-trivial
+
+    def test_hidden_orient_row_does_not_apply(self, client):
+        res = self._post(client, {
+            "entries": [
+                {"kind": "orient", "uid": "or_1",
+                 "rules": [{"type": "lead", "angle": 30}],
+                 "visible": False},
+                {"kind": "op", "uid": "op_a", "templateId": "pocket",
+                 "name": "A",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+            ],
+            "faces": [], "edges": [],
+        })
+        body = json.loads(res.data)
+        first = body["points"][0]
+        # Hidden orient row should not have applied — orientation is the
+        # template default (0, 0, -1).
+        assert abs(first["nx"]) < 0.01
+        assert abs(first["nz"] + 1.0) < 0.01
+
+    def test_orient_chain_replaces_at_next_orient(self, client):
+        """A second orient row replaces (not stacks) the active chain."""
+        res = self._post(client, {
+            "entries": [
+                {"kind": "orient", "uid": "or_1",
+                 "rules": [{"type": "lead", "angle": 30}],
+                 "visible": True},
+                {"kind": "op", "uid": "op_a", "templateId": "pocket",
+                 "name": "A",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+                {"kind": "orient", "uid": "or_2",
+                 "rules": [{"type": "fixed", "x": 0, "y": 0, "z": -1}],
+                 "visible": True},
+                {"kind": "op", "uid": "op_b", "templateId": "pocket",
+                 "name": "B",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+            ],
+            "faces": [], "edges": [],
+        })
+        body = json.loads(res.data)
+        b_start = body["op_ranges"][1]["point_start"]
+        # After or_2, chain is just fixed(0,0,-1); B should be vertical, not
+        # carrying the 30° lead from or_1.
+        second = body["points"][b_start]
+        assert abs(second["nz"] + 1.0) < 0.01
+        assert abs(second["nx"]) < 0.01
+
+    def test_scene_rows_are_silently_skipped(self, client):
+        """Scene rows (import/clear) are imperative on the live geometry
+        and shouldn't trigger 'unknown kind' warnings or break compile."""
+        res = self._post(client, {
+            "entries": [
+                {"kind": "scene", "uid": "s1", "action": "import", "visible": True},
+                {"kind": "op",    "uid": "op_1", "templateId": "pocket",
+                 "name": "Pocket",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+                {"kind": "scene", "uid": "s2", "action": "clear",  "visible": True},
+            ],
+            "faces": [], "edges": [],
+        })
+        body = json.loads(res.data)
+        assert body["warnings"] == []
+        assert len(body["op_ranges"]) == 1
+
+    def test_resolves_machine_id_to_yaml_file(self, client):
+        """`machine: "generic_5axis_ac"` should load the YAML, not just a factory."""
+        res = self._post(client, {
+            "entries": [
+                {"kind": "op", "uid": "op_1", "templateId": "pocket",
+                 "name": "Pocket",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+            ],
+            "faces": [], "edges": [],
+            "machine": "generic_5axis_ac",
+        })
+        assert res.status_code == 200
+        body = json.loads(res.data)
+        # G-code should reference the YAML's name field, not the factory's
+        assert "generic_5axis_ac" in body["gcode"]
+
+    def test_falls_back_to_factory_for_unknown_machine(self, client):
+        res = self._post(client, {
+            "entries": [
+                {"kind": "op", "uid": "op_1", "templateId": "pocket",
+                 "name": "Pocket",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+            ],
+            "faces": [], "edges": [],
+            "machine": "definitely-not-a-machine",
+        })
+        assert res.status_code == 200
+
+    def test_gcode_has_op_dividers(self, client):
+        res = self._post(client, {
+            "entries": [
+                {"kind": "op", "uid": "op_1", "templateId": "pocket",
+                 "name": "First",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+                {"kind": "op", "uid": "op_2", "templateId": "pocket",
+                 "name": "Second",
+                 "params": {"depth": 3.0, "stepdown": 1.0},
+                 "geometry": [[]], "visible": True},
+            ],
+            "faces": [], "edges": [],
+        })
+        body = json.loads(res.data)
+        assert "(--- OP 01  First ---)" in body["gcode"]
+        assert "(--- OP 02  Second ---)" in body["gcode"]
+        # gcode line ranges should be monotonic
+        ranges = body["op_ranges"]
+        assert ranges[0]["gcode_start_line"] < ranges[0]["gcode_end_line"]
+        assert ranges[1]["gcode_start_line"] >= ranges[0]["gcode_end_line"]
+
+
 # ── /generate-toolpath ────────────────────────────────────────────────────────
 
 

@@ -217,19 +217,6 @@ When adding a new feature, map its inputs and outputs to these types first. Node
 - **Node graph**: Target library is **litegraph.js**. The node graph JSON schema is defined in `docs/node_graph_schema.md`. All node graph work must keep the Python API and the graph in sync.
 - **Collision detection**: `trimesh` (Python) and `three-mesh-bvh` (JavaScript) for bounding-volume-hierarchy checks.
 
-## Change History
-
-All notable codebase changes are logged in [`history.md`](history.md) at the repo root.
-
-**When to add an entry:** After completing any of the following, prepend a new entry under the current session heading in `history.md`:
-- A new feature or component
-- A bug fix
-- A refactor that changes public APIs or store shape
-- A new design rule added to this file
-- A new TODO added to `TODO.md`
-
-Each entry should include: what changed, which files were touched, and *why* (the motivation or bug being fixed). Keep entries concise — two to five sentences is enough. Do not log purely mechanical edits (typo fixes, formatting, test-only changes with no behaviour change).
-
 ## How I Work With You
 
 Before implementing any feature, I will:

@@ -1,0 +1,58 @@
+/* Forgepath design tokens — pulled from design_handoff_forgepath_cam/styles.css.
+   Reproduce verbatim per the design handoff README. */
+
+:root {
+  /* Colour palette */
+  --bg:            #f3f1ea;
+  --panel:         #ffffff;
+  --panel-2:       #faf9f4;
+  --border:        #e6e3d9;
+  --border-strong: #d3cfc1;
+  --ink:           #1a1a17;
+  --ink-2:         #4a4943;
+  --muted:         #87857c;
+  --muted-2:       #b6b4a8;
+
+  /* Dual-accent system: green = additive, orange = subtractive, blue = selection */
+  --add:           oklch(62% 0.13 155);
+  --add-soft:      oklch(94% 0.04 155);
+  --sub:           oklch(66% 0.15 50);
+  --sub-soft:      oklch(95% 0.04 60);
+  --sel:           oklch(58% 0.16 245);
+  --sel-soft:      oklch(94% 0.05 245);
+  --warn:          oklch(72% 0.14 80);
+
+  /* Radii */
+  --r-sm:  6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 0 rgba(20,18,12,0.04), 0 1px 2px rgba(20,18,12,0.04);
+  --shadow-md: 0 1px 0 rgba(20,18,12,0.04), 0 4px 14px -6px rgba(20,18,12,0.10);
+  --shadow-lg: 0 1px 0 rgba(20,18,12,0.04), 0 14px 40px -10px rgba(20,18,12,0.16);
+
+  /* Typography
+     Geist + Geist Mono are the design targets. Until we load them via @font-face
+     we fall back to system stacks so the layout is correct from day one. */
+  --font-sans:
+    "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    "Geist Mono", ui-monospace, SFMono-Regular, "Menlo", "Monaco",
+    "Cascadia Mono", "Roboto Mono", monospace;
+}
+
+html, body {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
+}
