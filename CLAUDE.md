@@ -52,7 +52,7 @@ pip install -e utde_v0.1.0/
 # The Vite proxy forwards /api → localhost:5174. The Tauri sidecar binds a
 # random port instead and does NOT serve the browser proxy — always start
 # this separately before opening localhost:3000.
-python step_server.py
+python step_server.py --reload   # --reload watches all .py files and restarts on change (dev only)
 
 # Run the full workflow example
 python utde_v0.1.0/toolpath_engine/examples/demo_5axis_ded.py

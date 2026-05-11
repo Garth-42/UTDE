@@ -1067,7 +1067,19 @@ On reimport (same or revised file), a **re-match pass** compares stored fingerpr
 
 ---
 
-### 24. Visual machine builder — drag-and-drop joints and links (NOT STARTED)
+### 24. Node palette — add-node menu at the top of the node graph canvas (DONE — node graph removed in feature/forgepath-shell)
+
+**Historical note:** Originally landed via the `feature/script-view-editor` work. The Forgepath-shell refactor (this PR) removes the node graph entirely in favour of a timeline-driven UI, so this feature no longer ships — kept here as a record.
+
+**What was requested:** A menu bar along the top of the node graph view listing all available node types, organised into sections, that users can either click to add a node to the canvas or drag onto a specific position.
+
+**Files originally touched (now deleted):**
+- `utde-app/src/components/NodeGraph/NodeGraphPanel.jsx`, `NodePalette.jsx`
+- `utde-app/src/store/graphStore.js`
+
+---
+
+### 25. Visual machine builder — drag-and-drop joints and links (NOT STARTED)
 
 **Why:** The TopBar machine pill currently opens nothing — the picker UX is the planned-but-deferred half of Q6 from the Forgepath shell refactor. The Forgepath design ships with a picker over `machines/*.yaml` (Q6 part a — also still pending implementation). Part b is a full visual builder: drop joints onto a canvas, set their type (linear/rotary), axis, limits, and home position, optionally attach STEP collision geometry per link, and save out a new `machines/*.yaml`.
 
@@ -1088,7 +1100,7 @@ On reimport (same or revised file), a **re-match pass** compares stored fingerpr
 
 ---
 
-### 25. Composed Operations as Library cards — visual builder for stacking strategies (NOT STARTED)
+### 26. Composed Operations as Library cards — visual builder for stacking strategies (NOT STARTED)
 
 **Why deferred:** Originally planned as part of the user-authored-operations work; deferred to keep the slice small. For now the Library exposes the three primitive strategies directly and users compose by stacking them on the timeline. A composed Operation would be a single Library card whose underlying definition is `n` strategies + an orient chain + a curated param schema — runnable as one timeline entry instead of stacking strategies manually.
 
@@ -1123,7 +1135,7 @@ On reimport (same or revised file), a **re-match pass** compares stored fingerpr
 
 ---
 
-### 26. Form-builder for curating "important params" on an Operation (NOT STARTED)
+### 27. Form-builder for curating "important params" on an Operation (NOT STARTED)
 
 **Why deferred:** Part of the user-authored-operations stack (TODO #25), but worth calling out separately because it's a self-contained UX piece that can land independently and would also be useful for shipped templates (so future versions of e.g. `pocket.py` could mark `depth`/`stepdown`/`stepover` as "important" and tuck `feedrate`/`spindle` behind an Advanced section).
 
@@ -1142,7 +1154,7 @@ On reimport (same or revised file), a **re-match pass** compares stored fingerpr
 - Each row in the curated list shows the `stage_ref · param_ref` origin so the author knows where the value flows.
 
 **Pre-reqs:**
-- TODO #25 (the builder itself) needs to exist first — this is a component that lives inside it.
-- Strategy metadata (TODO #25) needs to expose param schemas in a uniform shape.
+- TODO #26 (the builder itself) needs to exist first — this is a component that lives inside it.
+- Strategy metadata (TODO #26) needs to expose param schemas in a uniform shape.
 
 ---

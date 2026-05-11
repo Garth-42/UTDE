@@ -63,6 +63,18 @@ export async function runScript(code) {
   return data; // { stdout, stderr, gcode, success }
 }
 
+export async function lintScript(code) {
+  const BASE = await base();
+  const res = await fetch(`${BASE}/lint-script`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "Server error");
+  return data; // { errors: [{ line, col, message }] }
+}
+
 export async function checkHealth() {
   const BASE = await base();
   const res = await fetch(`${BASE}/health`);

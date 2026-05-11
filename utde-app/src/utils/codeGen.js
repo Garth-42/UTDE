@@ -139,26 +139,47 @@ export function generatePythonCode(faces, edges, strategy, orientationRules, mac
 
   if (strategy.type === "follow_curve" && firstEdge) {
     lines.push(`paths = FollowCurveStrategy().generate(`);
-    lines.push(`    curve=${firstEdge},`);
+    const edgeArgs = edgeResults.length > 1
+      ? `curves=[${edgeResults.map((r) => r.varName).join(", ")}]`
+      : `curve=${firstEdge}`;
+    lines.push(`    ${edgeArgs},`);
     lines.push(`    feed_rate=${strategy.feed_rate},`);
     lines.push(`    spacing=${strategy.spacing},`);
     lines.push(`    path_type="${strategy.path_type}",`);
+    if (!strategy.chain)        lines.push(`    chain=False,`);
+    if (strategy.normal_offset) lines.push(`    normal_offset=${strategy.normal_offset},`);
+    if (strategy.edge_inset)    lines.push(`    inset=${strategy.edge_inset},`);
     lines.push(`)`);
-  } else if (strategy.type === "raster_fill" && firstSurface) {
+  } else if (strategy.type === "raster_fill" && (firstSurface || firstEdge)) {
     lines.push(`paths = RasterFillStrategy().generate(`);
-    lines.push(`    surface=${firstSurface},`);
+    if (firstSurface) {
+      lines.push(`    surface=${firstSurface},`);
+    } else if (edgeResults.length > 1) {
+      lines.push(`    curves=[${edgeResults.map((r) => r.varName).join(", ")}],`);
+    } else {
+      lines.push(`    boundary=${firstEdge},`);
+    }
     lines.push(`    spacing=${strategy.spacing},`);
     lines.push(`    feed_rate=${strategy.feed_rate},`);
     lines.push(`    angle=${strategy.angle},`);
     lines.push(`    zigzag=${strategy.zigzag ? "True" : "False"},`);
+    if (!strategy.respect_interior_boundaries) lines.push(`    respect_interior_boundaries=False,`);
+    if (strategy.chord_tolerance)  lines.push(`    chord_tolerance=${strategy.chord_tolerance},`);
+    if (strategy.scallop_height)   lines.push(`    scallop_height=${strategy.scallop_height},`);
     lines.push(`)`);
   } else if (strategy.type === "contour_parallel") {
-    const ref = firstEdge ?? firstSurface ?? "None";
     lines.push(`paths = ContourParallelStrategy().generate(`);
-    lines.push(`    boundary=${ref},`);
+    if (edgeResults.length > 1) {
+      lines.push(`    boundaries=[${edgeResults.map((r) => r.varName).join(", ")}],`);
+    } else {
+      lines.push(`    boundary=${firstEdge ?? firstSurface ?? "None"},`);
+    }
     lines.push(`    stepover=${strategy.stepover},`);
     lines.push(`    num_passes=${strategy.num_passes},`);
     lines.push(`    feed_rate=${strategy.feed_rate},`);
+    if (!strategy.chain)        lines.push(`    chain=False,`);
+    if (strategy.normal_offset) lines.push(`    normal_offset=${strategy.normal_offset},`);
+    if (strategy.edge_inset)    lines.push(`    inset=${strategy.edge_inset},`);
     lines.push(`)`);
   } else {
     lines.push("# TODO: configure a strategy");
