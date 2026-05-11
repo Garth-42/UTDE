@@ -4,7 +4,6 @@ import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Bounds, useBounds } fr
 import * as THREE from "three";
 import { useStepStore } from "../../store/stepStore";
 import { useUiStore } from "../../store/uiStore";
-import { useGraphStore } from "../../store/graphStore";
 import FaceMesh from "./FaceMesh";
 import EdgeLine from "./EdgeLine";
 import ToolpathLines from "./ToolpathLines";
@@ -148,20 +147,6 @@ export default function StepViewport() {
   const selectionMode     = useUiStore((s) => s.selectionMode);
   const showBasePlate     = useUiStore((s) => s.showBasePlate);
   const showToolpaths     = useUiStore((s) => s.showToolpaths);
-  const geometryPick      = useUiStore((s) => s.geometryPick);
-  const endGeometryPick   = useUiStore((s) => s.endGeometryPick);
-  const selectedFaceIds   = useStepStore((s) => s.selectedFaceIds);
-  const selectedEdgeIds   = useStepStore((s) => s.selectedEdgeIds);
-
-  const handleConfirmGeometry = () => {
-    if (!geometryPick) return;
-    useGraphStore.getState().setNodeGeometry(
-      geometryPick.nodeId,
-      [...selectedFaceIds],
-      [...selectedEdgeIds],
-    );
-    endGeometryPick();
-  };
 
   const hasGeometry = faces.length > 0 || edges.length > 0;
   const inPickMode  = pickingOrigin || pickingZOrigin;
@@ -178,45 +163,6 @@ export default function StepViewport() {
           Parsing STEP file…
         </div>
       )}
-      {/* Geometry pick mode banner */}
-      {geometryPick && (
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, zIndex: 20,
-          background: "rgba(99,85,224,0.92)", color: "#fff",
-          display: "flex", alignItems: "center", gap: 12,
-          padding: "10px 16px", fontSize: 12,
-        }}>
-          <span style={{ flex: 1 }}>
-            <strong>Select geometry for</strong> {geometryPick.nodeLabel.toUpperCase()}
-            {" — "}click faces or edges, then confirm.
-            {"  "}
-            <span style={{ opacity: 0.75, fontSize: 11 }}>
-              {selectedFaceIds.size} face{selectedFaceIds.size !== 1 ? "s" : ""},
-              {" "}{selectedEdgeIds.size} edge{selectedEdgeIds.size !== 1 ? "s" : ""} selected
-            </span>
-          </span>
-          <button
-            onClick={handleConfirmGeometry}
-            style={{
-              background: "#fff", color: "#6355e0", border: "none", borderRadius: 6,
-              padding: "5px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer",
-              letterSpacing: 0.5,
-            }}
-          >
-            ✓ Confirm
-          </button>
-          <button
-            onClick={endGeometryPick}
-            style={{
-              background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.4)",
-              borderRadius: 6, padding: "5px 10px", fontSize: 11, cursor: "pointer",
-            }}
-          >
-            ✗ Cancel
-          </button>
-        </div>
-      )}
-
       {pickingOrigin && (
         <div style={{
           position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",

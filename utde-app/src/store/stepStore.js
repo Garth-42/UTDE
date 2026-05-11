@@ -25,13 +25,16 @@ export const useStepStore = create((set, get) => ({
   // Parsed geometry from server
   faces: [],
   edges: [],
+  vertices: [],            // [{ id, x, y, z }] — server-side parsing wired in a later slice
   fileName: null,
 
   // Selection
   selectedFaceIds: new Set(),
   selectedEdgeIds: new Set(),
+  selectedVertexIds: new Set(),
   hoveredFaceId: null,
   hoveredEdgeId: null,
+  hoveredVertexId: null,
 
   // Workspace origin
   workspaceOrigin: null,   // { x, y, z } in CAD space — final value sent to API
@@ -48,14 +51,23 @@ export const useStepStore = create((set, get) => ({
   error: null,
 
   // Actions
-  setGeometry: (faces, edges, fileName) =>
-    set({ faces, edges, fileName, selectedFaceIds: new Set(), selectedEdgeIds: new Set(), error: null }),
+  setGeometry: (faces, edges, fileName, vertices = []) =>
+    set({
+      faces, edges, vertices, fileName,
+      selectedFaceIds: new Set(),
+      selectedEdgeIds: new Set(),
+      selectedVertexIds: new Set(),
+      error: null,
+    }),
 
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
 
-  setHovered: (type, id) =>
-    set(type === "face" ? { hoveredFaceId: id } : { hoveredEdgeId: id }),
+  setHovered: (type, id) => {
+    if (type === "face")   return set({ hoveredFaceId: id });
+    if (type === "edge")   return set({ hoveredEdgeId: id });
+    if (type === "vertex") return set({ hoveredVertexId: id });
+  },
 
   toggleFace: (id, multi = false) =>
     set((s) => {
@@ -81,6 +93,18 @@ export const useStepStore = create((set, get) => ({
       return { selectedEdgeIds: next };
     }),
 
+  toggleVertex: (id, multi = false) =>
+    set((s) => {
+      const next = new Set(s.selectedVertexIds);
+      if (!multi) {
+        if (next.has(id) && next.size === 1) { next.clear(); }
+        else { next.clear(); next.add(id); }
+      } else {
+        next.has(id) ? next.delete(id) : next.add(id);
+      }
+      return { selectedVertexIds: next };
+    }),
+
   selectByType: (geomType) =>
     set((s) => {
       const faceTypes = ["plane", "cylinder", "sphere", "cone", "torus", "other"];
@@ -95,11 +119,16 @@ export const useStepStore = create((set, get) => ({
 
   selectAll: () =>
     set((s) => ({
-      selectedFaceIds: new Set(s.faces.map((f) => f.id)),
-      selectedEdgeIds: new Set(s.edges.map((e) => e.id)),
+      selectedFaceIds:   new Set(s.faces.map((f) => f.id)),
+      selectedEdgeIds:   new Set(s.edges.map((e) => e.id)),
+      selectedVertexIds: new Set(s.vertices.map((v) => v.id)),
     })),
 
-  deselectAll: () => set({ selectedFaceIds: new Set(), selectedEdgeIds: new Set() }),
+  deselectAll: () => set({
+    selectedFaceIds:   new Set(),
+    selectedEdgeIds:   new Set(),
+    selectedVertexIds: new Set(),
+  }),
 
   // Workspace origin actions
   setWorkspaceOrigin: (pt) => set({

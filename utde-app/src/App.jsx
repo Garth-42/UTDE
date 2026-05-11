@@ -1,28 +1,30 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useUiStore } from "./store/uiStore";
-import Header from "./components/Header";
-import Sidebar from "./components/Sidebar";
-import StepViewport from "./components/viewport/StepViewport";
-import CodePanel from "./components/panels/CodePanel";
-import SplashScreen from "./components/SplashScreen";
 import { useStepStore } from "./store/stepStore";
+import { useOpsStore } from "./store/opsStore";
 import { loadSession } from "./utils/session";
 import { waitForServer, IS_TAURI } from "./lib/backend";
-import NodeGraphPanel from "./components/NodeGraph/NodeGraphPanel";
-import ScriptPanel    from "./components/ScriptView/ScriptPanel";
+
+import TopBar from "./components/TopBar";
+import StatusBar from "./components/StatusBar";
+import SetupTab from "./components/setup/SetupTab";
+import SimulateTab from "./components/simulate/SimulateTab";
+import PostTab from "./components/post/PostTab";
+import SplashScreen from "./components/SplashScreen";
+import ScriptOverlay from "./components/ScriptOverlay";
 
 const ROOT = {
-  width: "100%", height: "100vh",
-  display: "flex", flexDirection: "column",
-  fontFamily: '"Segoe UI", system-ui, sans-serif',
-  background: "#f0f0f5", color: "#1a1a2e",
+  width: "100%",
+  height: "100vh",
+  display: "flex",
+  flexDirection: "column",
+  background: "var(--bg)",
+  color: "var(--ink)",
   overflow: "hidden",
 };
 
 export default function App() {
-  const activePanel = useUiStore((s) => s.activePanel);
-  const graphView   = useUiStore((s) => s.graphView);
-  const scriptView  = useUiStore((s) => s.scriptView);
+  const tab = useUiStore((s) => s.tab);
 
   const [serverReady, setServerReady] = useState(!IS_TAURI);
   const [serverError, setServerError] = useState(null);
@@ -41,7 +43,22 @@ export default function App() {
 
   useEffect(() => {
     const handler = (e) => {
-      if (e.key === "Escape") useStepStore.getState().deselectAll();
+      // Ignore shortcuts while typing in form fields.
+      const tag = e.target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.target?.isContentEditable) return;
+
+      const ui = useUiStore.getState();
+      if (ui.tab === "setup") {
+        if (e.key === "1") { ui.setFilter("face");   return; }
+        if (e.key === "2") { ui.setFilter("edge");   return; }
+        if (e.key === "3") { ui.setFilter("vertex"); return; }
+        if (e.key === "Escape") {
+          useOpsStore.getState().cancelPrompt();
+          useStepStore.getState().deselectAll?.();
+          return;
+        }
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -53,26 +70,14 @@ export default function App() {
 
   return (
     <div style={ROOT}>
-      <Header />
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <Sidebar />
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-            {scriptView
-              ? <ScriptPanel />
-              : graphView
-                ? <NodeGraphPanel />
-                : <StepViewport />
-            }
-          </div>
-
-          {activePanel === "code" && (
-            <div style={{ height: 300, borderTop: "1px solid #d0d0df", background: "#f0f0f5", display: "flex", flexDirection: "column" }}>
-              <CodePanel />
-            </div>
-          )}
-        </div>
+      <TopBar />
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+        {tab === "setup"    && <SetupTab />}
+        {tab === "simulate" && <SimulateTab />}
+        {tab === "post"     && <PostTab />}
       </div>
+      <StatusBar />
+      <ScriptOverlay />
     </div>
   );
 }
