@@ -5,20 +5,16 @@ Template: FFF 3-Axis — Fused Filament Fabrication via External Slicer
 Process-agnostic template for FFF (3D printing) using an external slicer
 (LibSlic3r or CuraEngine) wrapped via the EngineWrapper pattern.
 
+The user explicitly selects the model to slice via the "model" geometry slot.
+The server injects the file path as params["_model_path"] before calling this
+template. Falls back to stub G-code when no binary or model path is available.
+
+Binary is resolved from the SLIC3R_BIN environment variable (default: "slic3r").
+
 Demonstrates:
 - EngineWrapper with all four hook points
 - Translating external G-code output into native ToolpathCollection
-- Adding 5-axis orientation via on_each_layer hook (upgrade path from 3-axis)
 - Path-type-aware parameter overrides via on_each_point hook
-
-The external slicer is called as a subprocess. If no slicer is available,
-the wrapper falls back to a stub that parses hand-written G-code — useful
-for testing the hook system without a slicer installed.
-
-To use:
-    from toolpath_engine import get_process
-    fn = get_process("fff-3axis")
-    result = fn(model, params={"layer_height": 0.2, "infill_density": 0.2})
 """
 
 import os
@@ -34,9 +30,6 @@ from toolpath_engine import (
 from toolpath_engine.post.processor import PostProcessor, PostConfig
 
 
-# ---------------------------------------------------------------------------
-# Stub G-code used when no slicer binary is available (for tests / preview)
-# ---------------------------------------------------------------------------
 _STUB_GCODE = """\
 ; Layer 0
 G1 X0 Y0 Z0.2 F3000
@@ -53,80 +46,114 @@ G1 X0 Y10 Z0.4 E8.0
 """
 
 
-def _call_libslic3r(stl_path: str, params: dict) -> str:
+def _call_libslic3r(model_path: str, params: dict) -> str:
     """
     Call LibSlic3r CLI and return G-code string.
-    Raises FileNotFoundError if slic3r binary is not found.
+    Raises FileNotFoundError if the binary is not found,
+    or subprocess.CalledProcessError if slicing fails.
     """
-    slic3r = os.environ.get("SLIC3R_BIN", "slic3r")
-    layer_h = params.get("layer_height", 0.2)
-    infill  = params.get("infill_density", 0.2)
+    slic3r      = os.environ.get("SLIC3R_BIN", "slic3r")
+    layer_h     = params.get("layer_height", 0.2)
+    infill      = params.get("infill_density", 0.2)
+    perimeters  = int(params.get("perimeters", 2))
+    nozzle_dia  = params.get("nozzle_diameter", 0.4)
+    filament_dia = params.get("filament_diameter", 1.75)
+    extruder_temp = int(params.get("extruder_temperature", 200))
+    bed_temp    = int(params.get("bed_temperature", 60))
+    brim_width  = params.get("brim_width", 0)
+    support     = params.get("support_material", "off")
+    support_angle = params.get("support_material_threshold", 45)
+    config_file = params.get("config_file", "").strip()
 
     with tempfile.NamedTemporaryFile(suffix=".gcode", delete=False) as out:
         out_path = out.name
 
-    subprocess.run(
-        [
-            slic3r, stl_path,
-            f"--layer-height={layer_h}",
-            f"--fill-density={infill}",
-            f"--output={out_path}",
-        ],
-        check=True,
-        capture_output=True,
-    )
+    cmd = [slic3r, model_path, f"--output={out_path}"]
+    if config_file:
+        cmd += ["--load", config_file]
+    cmd += [
+        f"--layer-height={layer_h}",
+        f"--fill-density={infill}",
+        f"--perimeters={perimeters}",
+        f"--nozzle-diameter={nozzle_dia}",
+        f"--filament-diameter={filament_dia}",
+        f"--temperature={extruder_temp}",
+        f"--bed-temperature={bed_temp}",
+        f"--brim-width={brim_width}",
+    ]
+    if support == "on":
+        cmd += [
+            "--support-material",
+            f"--support-material-threshold={int(support_angle)}",
+        ]
+
+    subprocess.run(cmd, check=True, capture_output=True)
     with open(out_path) as f:
         return f.read()
 
 
 @process(
     "fff-3axis",
-    description="FFF/FDM 3-axis printing via external slicer (LibSlic3r/CuraEngine) with EngineWrapper hooks.",
-    tags=["additive", "fff", "fdm", "3-axis", "slicer"],
+    description="FFF/FDM 3-axis printing via LibSlic3r/CuraEngine with EngineWrapper hooks.",
+    tags=["additive", "fff", "fdm", "3-axis", "slicer", "libslic3r"],
     kind="add",
     label="FFF Print",
     icon="add-layer",
-    requires=[],   # operates on the whole model; no specific picks
+    requires=[{"type": "model", "label": "Model to slice", "count": 1}],
     params=[
-        {"id": "layer_height",     "type": "number",  "default": 0.2,
-         "unit": "mm", "label": "Layer height"},
-        {"id": "infill_density",   "type": "number",  "default": 0.2,
-         "label": "Infill density", "hint": "0.0 - 1.0"},
-        {"id": "perimeter_speed",  "type": "number",  "default": 40,
+        {"id": "layer_height",              "type": "number",  "default": 0.2,
+         "unit": "mm",   "label": "Layer height"},
+        {"id": "infill_density",            "type": "number",  "default": 0.2,
+         "unit": "0–1",  "label": "Infill density", "hint": "0.0 – 1.0"},
+        {"id": "perimeters",                "type": "number",  "default": 2,
+         "label": "Perimeter walls"},
+        {"id": "support_material",          "type": "segment", "default": "off",
+         "options": ["off", "on"],          "label": "Supports"},
+        {"id": "support_material_threshold","type": "number",  "default": 45,
+         "unit": "°",    "label": "Support angle"},
+        {"id": "brim_width",                "type": "number",  "default": 0,
+         "unit": "mm",   "label": "Brim width"},
+        {"id": "nozzle_diameter",           "type": "number",  "default": 0.4,
+         "unit": "mm",   "label": "Nozzle Ø"},
+        {"id": "filament_diameter",         "type": "number",  "default": 1.75,
+         "unit": "mm",   "label": "Filament Ø"},
+        {"id": "extruder_temperature",      "type": "number",  "default": 200,
+         "unit": "°C",   "label": "Nozzle temp"},
+        {"id": "bed_temperature",           "type": "number",  "default": 60,
+         "unit": "°C",   "label": "Bed temp"},
+        {"id": "perimeter_speed",           "type": "number",  "default": 40,
          "unit": "mm/s", "label": "Perimeter speed"},
-        {"id": "infill_speed",     "type": "number",  "default": 60,
+        {"id": "infill_speed",              "type": "number",  "default": 60,
          "unit": "mm/s", "label": "Infill speed"},
-        {"id": "upgrade_to_5axis", "type": "segment", "default": "off",
-         "options": ["off", "on"], "label": "Upgrade to 5-axis"},
+        {"id": "config_file",               "type": "text",    "default": "",
+         "label": "Config path (.ini)",
+         "hint": "Optional — load a LibSlic3r .ini config before applying params above"},
     ],
     est_time=30.0,
     est_volume=12.0,
 )
-def fff_3axis(model=None, params=None):
+def fff_3axis(model=None, geometry=None, params=None):
     """
-    Generate an FFF toolpath via an external slicer, with hooks for modification.
+    Generate an FFF toolpath via LibSlic3r, with hooks for modification.
 
     Args:
-        model:  GeometryModel — used to export STL for the slicer. If None,
-                the stub G-code is used (useful for testing hooks).
-        params: Dict of process overrides:
-                  layer_height     (mm, default 0.2)
-                  infill_density   (0–1, default 0.2)
-                  perimeter_speed  (mm/s, default 40)
-                  infill_speed     (mm/s, default 60)
-                  upgrade_to_5axis (bool, default False — adds surface-normal orient)
+        model:    Not used directly; model path comes from params["_model_path"]
+                  (injected by the server when the user selects the model in the UI).
+        geometry: List-of-lists matching `requires` — geometry[0] will be
+                  ["__model__"] when wired up; resolved by the server.
+        params:   Dict of param values. The server injects "_model_path" for the
+                  selected model. All other keys match the @process params schema.
 
     Returns:
         ToolpathCollection with path_type metadata from slicer preserved on every point.
     """
     p = params or {}
-    upgrade_5axis   = p.get("upgrade_to_5axis", False)
-    perimeter_speed = p.get("perimeter_speed", 40) * 60   # → mm/min
+    model_path      = p.get("_model_path")
+    perimeter_speed = p.get("perimeter_speed", 40) * 60   # mm/s → mm/min
     infill_speed    = p.get("infill_speed", 60) * 60
 
     slicer = EngineWrapper("libslic3r")
 
-    # ── Hook: slow perimeters, speed up infill ────────────────────────────
     @slicer.on_each_point
     def tune_speeds(point):
         if point.path_type == "perimeter":
@@ -135,15 +162,12 @@ def fff_3axis(model=None, params=None):
             point.feed_rate = infill_speed
         return point
 
-    # ── Hook: upgrade to 5-axis by setting Z-up orientation (3-axis default)
-    #    Replace this hook with to_normal(surface) for true 5-axis output.
     @slicer.on_each_point
     def set_orientation(point):
         if point.orientation is None:
             point.orientation = Orientation.z_down()
         return point
 
-    # ── Hook: tag each layer with metadata ───────────────────────────────
     @slicer.on_each_layer
     def annotate_layer(layer_idx, toolpaths):
         for tp in toolpaths:
@@ -151,34 +175,20 @@ def fff_3axis(model=None, params=None):
             tp.metadata["layer_index"] = layer_idx
         return toolpaths
 
-    # ── Engine function ───────────────────────────────────────────────────
-    def run_slicer(geometry, run_params):
-        if geometry is None:
+    def run_slicer(geometry_arg, run_params):
+        if not model_path:
             gcode = _STUB_GCODE
         else:
-            with tempfile.NamedTemporaryFile(suffix=".stl", delete=False) as f:
-                stl_path = f.name
             try:
-                geometry.export_stl(stl_path)
-                gcode = _call_libslic3r(stl_path, run_params)
+                gcode = _call_libslic3r(model_path, run_params)
             except (FileNotFoundError, subprocess.CalledProcessError):
-                # Slicer not available — use stub for development/testing
                 gcode = _STUB_GCODE
-
         return EngineWrapper.parse_gcode_to_collection(gcode, source="libslic3r")
 
     slicer.set_engine(run_slicer)
 
-    # ── Run ───────────────────────────────────────────────────────────────
-    collection = slicer.run(model, p)
+    collection = slicer.run(None, p)
 
-    # ── Optional: upgrade 3-axis → 5-axis ────────────────────────────────
-    # Uncomment and adapt when surface geometry is available:
-    # if upgrade_5axis and model is not None:
-    #     from toolpath_engine import to_normal
-    #     collection.orient(to_normal(model.top_surface()))
-
-    # ── Post-process ──────────────────────────────────────────────────────
     machine  = Machine.cartesian_3axis(name="3axis_gantry")
     post_cfg = PostConfig(
         safe_start=["G28", "G90", "M82"],
