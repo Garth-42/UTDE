@@ -13,8 +13,8 @@ const POCKET = {
 };
 
 const FFF = {
-  id: "fff-3axis",
-  label: "FFF Print",
+  id: "libslic3r",
+  label: "LibSlic3r",
   kind: "add",
   requires: [],
   params: [{ id: "layer_height", type: "number", default: 0.2 }],
@@ -143,7 +143,7 @@ describe("reorder", () => {
   it("moves an entry from one position to another", () => {
     useOpsStore.getState().reorder(0, 2);
     const ids = useOpsStore.getState().entries.map((e) => e.templateId);
-    expect(ids).toEqual(["drill", "fff-3axis", "pocket"]);
+    expect(ids).toEqual(["drill", "libslic3r", "pocket"]);
   });
 
   it("updates activeIdx to follow the moved entry", () => {

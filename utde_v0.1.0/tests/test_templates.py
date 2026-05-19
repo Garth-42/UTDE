@@ -18,8 +18,8 @@ class TestRegistration:
     def test_ded_5axis_is_registered(self):
         assert get_process("ded-5axis-helical") is not None
 
-    def test_fff_3axis_is_registered(self):
-        assert get_process("fff-3axis") is not None
+    def test_libslic3r_is_registered(self):
+        assert get_process("libslic3r") is not None
 
     def test_raster_fill_is_registered(self):
         assert get_process("raster_fill") is not None
@@ -142,31 +142,31 @@ class TestStrategyTemplatesRun:
         assert any(len(tp.points) > 0 for tp in result.toolpaths)
 
 
-class TestFff3AxisTemplate:
-    def test_fff_3axis_requires_model_slot(self):
-        m = next(t for t in list_processes() if t["id"] == "fff-3axis")
+class TestLibSlic3rTemplate:
+    def test_libslic3r_requires_model_slot(self):
+        m = next(t for t in list_processes() if t["id"] == "libslic3r")
         assert len(m["requires"]) == 1
         assert m["requires"][0]["type"] == "model"
 
-    def test_fff_3axis_params_include_temperatures(self):
-        m = next(t for t in list_processes() if t["id"] == "fff-3axis")
+    def test_libslic3r_params_include_temperatures(self):
+        m = next(t for t in list_processes() if t["id"] == "libslic3r")
         ids = {p["id"] for p in m["params"]}
         assert {"extruder_temperature", "bed_temperature", "nozzle_diameter",
                 "filament_diameter", "config_file"}.issubset(ids)
 
-    def test_fff_3axis_config_file_is_text_type(self):
-        m = next(t for t in list_processes() if t["id"] == "fff-3axis")
+    def test_libslic3r_config_file_is_text_type(self):
+        m = next(t for t in list_processes() if t["id"] == "libslic3r")
         cfg = next(p for p in m["params"] if p["id"] == "config_file")
         assert cfg["type"] == "text"
 
-    def test_fff_3axis_stub_fallback_produces_points(self):
-        result = get_process("fff-3axis")()
+    def test_libslic3r_stub_fallback_produces_points(self):
+        result = get_process("libslic3r")()
         assert isinstance(result, ToolpathCollection)
         total = sum(len(tp.points) for tp in result.toolpaths)
         assert total > 0
 
-    def test_fff_3axis_points_have_libslic3r_source(self):
-        result = get_process("fff-3axis")()
+    def test_libslic3r_points_have_libslic3r_source(self):
+        result = get_process("libslic3r")()
         sources = {pt.source for tp in result.toolpaths for pt in tp.points}
         assert "libslic3r" in sources
 

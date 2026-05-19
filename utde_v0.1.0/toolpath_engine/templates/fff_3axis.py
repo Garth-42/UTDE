@@ -93,11 +93,11 @@ def _call_libslic3r(model_path: str, params: dict) -> str:
 
 
 @process(
-    "fff-3axis",
-    description="FFF/FDM 3-axis printing via LibSlic3r/CuraEngine with EngineWrapper hooks.",
+    "libslic3r",
+    description="Slice the selected model via LibSlic3r CLI. Exposes common slicing parameters and supports loading a full .ini config.",
     tags=["additive", "fff", "fdm", "3-axis", "slicer", "libslic3r"],
     kind="add",
-    label="FFF Print",
+    label="LibSlic3r",
     icon="add-layer",
     requires=[{"type": "model", "label": "Model to slice", "count": 1}],
     params=[
