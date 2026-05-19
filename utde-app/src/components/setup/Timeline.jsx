@@ -227,13 +227,6 @@ export default function Timeline() {
         >
           <I.plus /> <span>Add operation</span>
         </button>
-        <button
-          type="button"
-          style={STYLES.addBtn}
-          onClick={() => applyOrient()}
-        >
-          <I.orient /> <span>Add orient</span>
-        </button>
 
         {entries.length > 0 && <CycleSummary entries={entries} tplById={tplById} />}
       </div>

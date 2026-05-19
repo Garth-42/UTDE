@@ -147,6 +147,8 @@ export default function StepViewport() {
   const selectionMode     = useUiStore((s) => s.selectionMode);
   const showBasePlate     = useUiStore((s) => s.showBasePlate);
   const showToolpaths     = useUiStore((s) => s.showToolpaths);
+  const theme               = useUiStore((s) => s.theme);
+  const viewportBg         = theme === "dark" ? "#2a2a2a" : "#e8e8f2";
 
   const hasGeometry = faces.length > 0 || edges.length > 0;
   const inPickMode  = pickingOrigin || pickingZOrigin;
@@ -185,7 +187,7 @@ export default function StepViewport() {
       )}
       <Canvas
         camera={{ fov: 50, near: 0.1, far: 100000, position: [0, -300, 200] }}
-        style={{ background: "#e8e8f2", cursor: inPickMode ? "crosshair" : "default" }}
+        style={{ background: viewportBg, cursor: inPickMode ? "crosshair" : "default" }}
         raycaster={{ params: { Line: { threshold: 2 } } }}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
