@@ -46,13 +46,18 @@ function emptyGeometry(templateMeta) {
 
 export const useOpsStore = create((set, get) => ({
   entries: [defaultImportEntry()],
-  activeIdx: null,
-  rpMode: "library",                // "library" | "params"
+  activeIdx: 0,
+  rpMode: "params",                // "library" | "params"
   promptSlot: null,                 // { entryIdx, slotIdx } | null
 
   // ── Template-driven mutations ──────────────────────────────────────────
 
   applyTemplate: (templateMeta) => {
+    if (templateMeta.id === "add_orient") {
+      get().applyOrient();
+      return;
+    }
+
     const entry = {
       kind: "op",
       uid:        newUid("op"),

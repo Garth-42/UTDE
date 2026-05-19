@@ -43,6 +43,18 @@
     "Cascadia Mono", "Roboto Mono", monospace;
 }
 
+body.dark {
+  --bg:            #121212;
+  --panel:         #1e1e1e;
+  --panel-2:       #2a2a2a;
+  --border:        #333333;
+  --border-strong: #444444;
+  --ink:           #e0e0e0;
+  --ink-2:         #a0a0a0;
+  --muted:         #707070;
+  --muted-2:       #505050;
+}
+
 html, body {
   font-family: var(--font-sans);
   font-size: 13px;
@@ -50,6 +62,7 @@ html, body {
   letter-spacing: -0.005em;
   color: var(--ink);
   background: var(--bg);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .mono {

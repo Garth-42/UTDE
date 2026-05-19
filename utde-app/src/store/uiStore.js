@@ -10,22 +10,45 @@ import { create } from "zustand";
  * isn't worth a parallel refactor right now.
  */
 
-export const useUiStore = create((set) => ({
-  tab:    "setup",         // "setup" | "simulate" | "post"
-  filter: "face",          // "face" | "edge" | "vertex"
-  scriptOverlayOpen: false,
+export const useUiStore = create((set, get) => {
+  const savedTheme = localStorage.getItem("utde-theme");
+  const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const initialTheme = savedTheme || (systemDark ? "dark" : "light");
 
-  // Used by the 3D viewport
-  selectionMode: "both",   // "faces" | "edges" | "both" — derived from `filter`
-  showBasePlate: true,
-  showToolpaths: false,
+  // Apply initial theme class to body immediately
+  if (typeof document !== "undefined") {
+    if (initialTheme === "dark") document.body.classList.add("dark");
+  }
 
-  setTab:                (tab)     => set({ tab }),
-  setFilter:             (filter)  => set({ filter }),
-  toggleScriptOverlay:   ()        => set((s) => ({ scriptOverlayOpen: !s.scriptOverlayOpen })),
-  setScriptOverlay:      (v)       => set({ scriptOverlayOpen: v }),
+  return {
+    tab:    "setup",         // "setup" | "simulate" | "post"
+    filter: "face",          // "face" | "edge" | "vertex"
+    scriptOverlayOpen: false,
+    theme: initialTheme,
 
-  setSelectionMode:      (mode)    => set({ selectionMode: mode }),
-  setShowToolpaths:      (v)       => set({ showToolpaths: v }),
-  setShowBasePlate:      (v)       => set({ showBasePlate: v }),
-}));
+    // Used by the 3D viewport
+    selectionMode: "both",   // "faces" | "edges" | "both" — derived from `filter`
+    showBasePlate: true,
+    showToolpaths: false,
+
+    setTab:                (tab)     => set({ tab }),
+    setFilter:             (filter)  => set({ filter }),
+    toggleScriptOverlay:   ()        => set((s) => ({ scriptOverlayOpen: !s.scriptOverlayOpen })),
+    setScriptOverlay:      (v)       => set({ scriptOverlayOpen: v }),
+
+    setSelectionMode:      (mode)    => set({ selectionMode: mode }),
+    setShowToolpaths:      (v)       => set({ showToolpaths: v }),
+    setShowBasePlate:      (v)       => set({ showBasePlate: v }),
+
+    toggleTheme: () => {
+      set((s) => {
+        const next = s.theme === "light" ? "dark" : "light";
+        localStorage.setItem("utde-theme", next);
+        if (typeof document !== "undefined") {
+          document.body.classList.toggle("dark", next === "dark");
+        }
+        return { theme: next };
+      });
+    },
+  };
+});

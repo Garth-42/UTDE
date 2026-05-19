@@ -93,6 +93,7 @@ const STYLES = {
   btn: {
     display: "flex",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     padding: "6px 12px",
     border: "1px solid var(--border)",
@@ -112,6 +113,8 @@ const STYLES = {
 export default function TopBar() {
   const tab    = useUiStore((s) => s.tab);
   const setTab = useUiStore((s) => s.setTab);
+  const theme   = useUiStore((s) => s.theme);
+  const toggleTheme = useUiStore((s) => s.toggleTheme);
   const scriptOverlayOpen   = useUiStore((s) => s.scriptOverlayOpen);
   const toggleScriptOverlay = useUiStore((s) => s.toggleScriptOverlay);
   const isCompiling  = useToolpathStore((s) => s.isCompiling);
@@ -204,6 +207,14 @@ export default function TopBar() {
         aria-pressed={scriptOverlayOpen}
       >
         <span className="mono" style={{ fontSize: 12 }}>{"</>"}</span>
+      </button>
+
+      <button
+        style={STYLES.btn}
+        onClick={toggleTheme}
+        title={theme === "light" ? "Switch to Night Mode" : "Switch to Light Mode"}
+      >
+        <span>{theme === "light" ? "🌙" : "☀️"}</span>
       </button>
 
       <button style={STYLES.btn}>Validate</button>
