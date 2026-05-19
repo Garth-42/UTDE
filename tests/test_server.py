@@ -73,6 +73,17 @@ class TestTemplates:
         ids = [t["id"] for t in body["templates"]]
         assert "pocket" in ids
 
+    def test_includes_prusaslicer(self, client):
+        body = json.loads(client.get("/templates").data)
+        ids = [t["id"] for t in body["templates"]]
+        assert "prusaslicer" in ids
+
+    def test_prusaslicer_has_model_requires(self, client):
+        body = json.loads(client.get("/templates").data)
+        ps = next(t for t in body["templates"] if t["id"] == "prusaslicer")
+        assert len(ps["requires"]) == 1
+        assert ps["requires"][0]["type"] == "model"
+
     def test_includes_strategy_primitives(self, client):
         body = json.loads(client.get("/templates").data)
         ids = [t["id"] for t in body["templates"]]
@@ -399,6 +410,59 @@ class TestCompileTimeline:
         ranges = body["op_ranges"]
         assert ranges[0]["gcode_start_line"] < ranges[0]["gcode_end_line"]
         assert ranges[1]["gcode_start_line"] >= ranges[0]["gcode_end_line"]
+
+
+# ── /compile-timeline — prusaslicer ──────────────────────────────────────────
+
+
+class TestCompileTimelineSlicer:
+    def _post(self, client, payload):
+        return client.post(
+            "/compile-timeline",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+    def test_prusaslicer_entry_compiles_with_stub(self, client):
+        # No STEP file loaded (_LAST_MODEL_PATH is None) → falls back to stub G-code
+        res = self._post(client, {
+            "entries": [
+                {"kind": "op", "uid": "op_ps", "templateId": "prusaslicer",
+                 "name": "Slice",
+                 "params": {"layer_height": 0.2},
+                 "geometry": [["__model__"]], "visible": True},
+            ],
+            "faces": [], "edges": [],
+        })
+        assert res.status_code == 200
+        body = json.loads(res.data)
+        assert "error" not in body
+        assert body["point_count"] > 0
+        assert len(body["op_ranges"]) == 1
+        assert body["op_ranges"][0]["templateId"] == "prusaslicer"
+
+    def test_prusaslicer_model_path_injected_when_step_loaded(self, client, tmp_path):
+        import step_server
+        # Simulate a previously-parsed STEP file by setting the global.
+        fake_step = tmp_path / "part.step"
+        fake_step.write_text("placeholder")
+        original = step_server._LAST_MODEL_PATH
+        step_server._LAST_MODEL_PATH = str(fake_step)
+        try:
+            res = self._post(client, {
+                "entries": [
+                    {"kind": "op", "uid": "op_ps", "templateId": "prusaslicer",
+                     "name": "Slice",
+                     "params": {},
+                     "geometry": [["__model__"]], "visible": True},
+                ],
+                "faces": [], "edges": [],
+            })
+            assert res.status_code == 200
+            body = json.loads(res.data)
+            assert body["point_count"] > 0
+        finally:
+            step_server._LAST_MODEL_PATH = original
 
 
 # ── /generate-toolpath ────────────────────────────────────────────────────────

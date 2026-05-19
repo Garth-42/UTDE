@@ -153,6 +153,8 @@ function selectionSetForFilter(stepState, filter) {
   if (filter === "face")   return stepState.selectedFaceIds;
   if (filter === "edge")   return stepState.selectedEdgeIds;
   if (filter === "vertex") return stepState.selectedVertexIds;
+  // "model" type: the whole loaded model — represented by the sentinel value.
+  if (filter === "model")  return new Set(["__model__"]);
   return new Set();
 }
 
@@ -172,6 +174,7 @@ export default function SetupViewport() {
   const selectedEdgeIds   = useStepStore((s) => s.selectedEdgeIds);
   const selectedVertexIds = useStepStore((s) => s.selectedVertexIds);
   const deselectAll       = useStepStore((s) => s.deselectAll);
+  const fileName          = useStepStore((s) => s.fileName);
 
   // Sync the new filter into the legacy selectionMode the inner StepViewport reads.
   useEffect(() => {
@@ -196,7 +199,7 @@ export default function SetupViewport() {
   }, [promptSlot, entries]);
 
   const canConfirm = promptInfo
-    ? counts[promptInfo.req.type] > 0
+    ? (promptInfo.req.type === "model" || counts[promptInfo.req.type] > 0)
     : false;
 
   function confirmPrompt() {
@@ -205,9 +208,11 @@ export default function SetupViewport() {
     const stepState = useStepStore.getState();
     const picks = [...selectionSetForFilter(stepState, req.type)];
     setGeometryForSlot(promptSlot.entryIdx, promptSlot.slotIdx, picks);
-    const summary = picks.length === 1
-      ? `${req.type} ${picks[0]}`
-      : `${req.type} × ${picks.length}`;
+    const summary = req.type === "model"
+      ? (fileName || "model")
+      : picks.length === 1
+        ? `${req.type} ${picks[0]}`
+        : `${req.type} × ${picks.length}`;
     setGeomSummary(promptSlot.entryIdx, summary);
     deselectAll();
     advancePromptOrClear(promptInfo.meta);
@@ -267,19 +272,31 @@ export default function SetupViewport() {
       {/* Prompt banner — only when a slot needs picks */}
       {promptInfo && (
         <div style={STYLES.banner} role="dialog" aria-label="Geometry prompt">
-          <span style={STYLES.bannerLabel}>
-            <span>Select </span>
-            <span style={STYLES.bannerStrong}>{promptInfo.req.label}</span>
-            <span style={{ opacity: 0.6 }}>{` for ${promptInfo.opName}`}</span>
-          </span>
-          <span className="mono" style={STYLES.bannerChip}>
-            {promptInfo.req.type}{promptInfo.req.count === 0 ? " · multi-pick" : ""}
-          </span>
-          <span style={STYLES.bannerCount}>
-            {counts[promptInfo.req.type]}
-            {" "}
-            {counts[promptInfo.req.type] === 1 ? "pick" : "picks"}
-          </span>
+          {promptInfo.req.type === "model" ? (
+            <span style={STYLES.bannerLabel}>
+              <span>Using </span>
+              <span style={STYLES.bannerStrong}>{fileName || "loaded model"}</span>
+              <span style={{ opacity: 0.6 }}>{` for ${promptInfo.opName}`}</span>
+            </span>
+          ) : (
+            <span style={STYLES.bannerLabel}>
+              <span>Select </span>
+              <span style={STYLES.bannerStrong}>{promptInfo.req.label}</span>
+              <span style={{ opacity: 0.6 }}>{` for ${promptInfo.opName}`}</span>
+            </span>
+          )}
+          {promptInfo.req.type !== "model" && (
+            <>
+              <span className="mono" style={STYLES.bannerChip}>
+                {promptInfo.req.type}{promptInfo.req.count === 0 ? " · multi-pick" : ""}
+              </span>
+              <span style={STYLES.bannerCount}>
+                {counts[promptInfo.req.type]}
+                {" "}
+                {counts[promptInfo.req.type] === 1 ? "pick" : "picks"}
+              </span>
+            </>
+          )}
           <button
             type="button"
             style={STYLES.bannerCancel}
