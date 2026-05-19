@@ -75,13 +75,6 @@ describe("Timeline", () => {
     expect(useOpsStore.getState().rpMode).toBe("library");
   });
 
-  it("'Add orient' button creates an orient entry", () => {
-    render(<Timeline />);
-    fireEvent.click(screen.getByText(/Add orient/i));
-    const e = useOpsStore.getState().entries;
-    expect(e).toHaveLength(1);
-    expect(e[0].kind).toBe("orient");
-  });
 
   it("visibility toggle flips entry.visible", () => {
     useOpsStore.getState().applyTemplate(POCKET);

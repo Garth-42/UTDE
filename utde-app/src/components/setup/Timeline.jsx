@@ -163,7 +163,6 @@ export default function Timeline() {
   const reorder     = useOpsStore((s) => s.reorder);
   const remove      = useOpsStore((s) => s.remove);
   const toggleVis   = useOpsStore((s) => s.toggleVis);
-  const applyOrient = useOpsStore((s) => s.applyOrient);
   const setRpMode   = useOpsStore((s) => s.setRpMode);
 
   const { templates } = useTemplates();
@@ -228,13 +227,6 @@ export default function Timeline() {
           <I.plus /> <span>Add operation</span>
         </button>
 
-        <button
-          type="button"
-          style={STYLES.addBtn}
-          onClick={applyOrient}
-        >
-          <I.orient /> <span>Add orient</span>
-        </button>
 
         {entries.length > 0 && <CycleSummary entries={entries} tplById={tplById} />}
       </div>

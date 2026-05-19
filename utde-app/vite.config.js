@@ -11,6 +11,8 @@ export default defineConfig({
         target: "http://localhost:5174",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
+        proxyTimeout: 45000,
+        timeout: 45000,
       },
     },
   },
