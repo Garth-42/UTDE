@@ -121,24 +121,38 @@ Data flows through a pipeline of composable components:
 
 **2. Flask API Server** (`step_server.py`)
 
-Three main endpoints:
+Key endpoints:
+- `GET  /health` — Liveness check
+- `GET  /machines` — List available machine definitions
+- `POST /machines/import` — Import a machine YAML
+- `GET  /templates` — List registered process templates (name, params, tags, etc.)
 - `POST /parse-step` — Tessellates uploaded STEP files using pythonocc → JSON (faces + edges)
-- `POST /generate-toolpath` — Receives strategy + orientation rule config, calls Python backend, returns toolpath points + G-code
+- `POST /parse-step-path` — Same as above but accepts a native file path (Tauri desktop only)
+- `POST /compile-timeline` — Primary UI endpoint: receives ordered timeline entries + machine ID, runs each op, returns toolpath points + G-code
+- `POST /generate-toolpath` — Legacy single-op endpoint (still present; UI now uses `/compile-timeline`)
+- `POST /lint-script` — Validates a user Python script without executing it
 - `POST /run-script` — Executes arbitrary user Python code for custom workflows
 
 **3. React Frontend** (`utde-app/src/`)
 
-Two-mode UI connected to Flask via `api/client.js`:
-- **STEP Import Mode**: Upload CAD file, inspect geometry, select faces/edges, set workspace origin
-- **Toolpath Mode**: Configure strategy & orientation rules, visualize paths, view generated Python/G-code
+Three-tab UI connected to Flask via `api/client.js`:
+- **Setup tab** (`components/setup/`): Upload CAD geometry, build an ordered timeline of operations, configure parameters, preview toolpaths in the 3D viewport
+- **Simulate tab** (`components/simulate/`): Play back compiled toolpaths with scrub controls, speed multiplier (0.5×/1×/4×), and per-op HUD
+- **Post tab** (`components/post/`): Inspect generated G-code with syntax highlighting, select machine, export `.nc` file
 
-State managed with Zustand across four stores:
+The Setup tab uses a fixed three-column layout:
+- **Timeline** (left, 268 px) — `Timeline.jsx`: ordered list of `op`, `orient`, and `scene` entries; drag-to-reorder; cycle summary footer
+- **3D Viewport** (center, 1fr) — `SetupViewport.jsx`: React Three Fiber canvas for geometry inspection and toolpath preview
+- **Right panel** (right, 320 px) — `RightPanel.jsx`: routes to `LibraryPanel` (template browser), `ParamEditorOp`, `ParamEditorOrient`, or `ParamEditorScene` based on selection state
+
+State managed with Zustand across five stores:
 - `stepStore` — Geometry, face/edge selection, workspace origin
-- `strategyStore` — Active strategy parameters + orientation rule chain
-- `toolpathStore` — Generated toolpath points
-- `uiStore` — Active mode and panel visibility
+- `opsStore` — Ordered timeline of entries (op/orient/scene), active selection, geometry prompt slots, orient chain
+- `toolpathStore` — Compiled toolpath points, animation playback state (progress, speed, play/pause)
+- `machineStore` — Available machine list from server, active machine selection
+- `uiStore` — Active tab, geometry selection filter (face/edge/vertex), theme, viewport toggles
 
-The 3D viewport (`components/viewport/`) uses React Three Fiber. The sidebar (`components/sidebar/`) renders panels contextually based on `uiStore` mode.
+The timeline is the canonical source of truth. `timelineToScript.js` renders a read-only Python script view from the entries; `timelineCompiler.js` sends the timeline to `/compile-timeline` and populates `toolpathStore`. There is no visual node graph — the timeline replaced it.
 
 **Browser vs Tauri branching**: `IS_TAURI = "__TAURI_INTERNALS__" in window` gates all desktop-specific code. `src/lib/backend.js` abstracts platform differences: `getBaseUrl()` calls `invoke("get_server_port")` in Tauri vs returns `/api` in browser; `openStepFileDialog()` / `saveGcodeDialog()` use native dialogs in Tauri vs browser fallbacks.
 
@@ -168,7 +182,7 @@ These are active decision filters, not background philosophy. Apply them before 
 
 ### One representation, two views
 
-> The visual node graph and the Python script are two interfaces to the same underlying data. Every node must correspond to exactly one Python API call. The graph serializes to JSON that round-trips to/from a Python script. Never build a node graph feature that has no Python API equivalent, and vice versa.
+> The timeline and the Python script are two interfaces to the same underlying data. Every timeline entry must correspond to exactly one Python API call (or a small, deterministic set of calls). The timeline serializes to JSON that round-trips to/from a Python script via `timelineToScript.js`. Never build a timeline feature that has no Python API equivalent, and vice versa.
 
 ### Plain-text everything
 
@@ -178,13 +192,13 @@ These are active decision filters, not background philosophy. Apply them before 
 
 > When integrating LibSlic3r, CuraEngine, or any other external engine: translate app primitives → engine format → call engine → translate back to native `ToolpathCollection`. Expose hooks at `before_slice`, `after_slice`, `on_each_layer`, `on_each_point`. Never call an external engine directly from core library code. See `integration/wrapper.py`.
 
-### Every strategy node inspector must include a Preview Toolpath section
+### Every op entry must support Preview Toolpath
 
-> The inspector panel for any node of type `strategy` **must** render a `<PreviewToolpathSection>` below its parameter fields. This section provides a `▶ Preview Toolpath` button that generates and visualises the toolpath for that node in isolation — using the three-level geometry resolution (wired source → stored selection → global selection), runs the full orient rule chain, stores the result in `toolpathStore`, enables `showToolpaths`, and switches to the 3D view. On error it falls back to Python code preview. When adding a new strategy type, do not skip this section — it is how the user validates that a strategy is working correctly without leaving the node graph.
+> `ParamEditorOp` **must** include a `▶ Preview` button for every operation entry. Clicking it calls `previewActiveOp()` in `timelineCompiler.js`, which compiles the active op plus any visible orient rows above it in isolation, stores the result in `toolpathStore`, and displays it in the Setup viewport. On error it falls back to showing the Python code in the script overlay. When adding a new strategy type, do not skip this — it is how the user validates a strategy without running the full timeline.
 
-### Geometry-capable nodes always expose a geometry input port
+### Op entries that need geometry use the prompt slot system
 
-> Any node that allows manual geometry selection (via the "Select geometry" button) **must** also expose a `surface_in` input port of type `Surface`. This lets users wire a geometry source node directly instead of picking manually — the wired connection takes priority over a stored selection, which takes priority over the global viewport selection. When creating a new node type that needs geometry input, always add `{ id: "surface_in", type: "Surface" }` to its `input_ports` array and render the corresponding `<Handle>` alongside the selection button.
+> When an op template declares `requires` geometry (faces, edges, or both), `opsStore` tracks a `promptSlot` index pointing to the next unfilled geometry slot. The Setup viewport's selection filter auto-switches to match the required type, and each click-to-select advances the slot. Do not add ad-hoc geometry pickers outside this system — it is how geometry selection stays consistent across all op types.
 
 ### Orientation rules are composable
 
@@ -209,12 +223,11 @@ All data in the system flows through these typed primitives:
 | `Variable` | Named value (number, string, boolean) for process logic |
 | `OrientRule` | Composable orientation strategy, chainable |
 
-When adding a new feature, map its inputs and outputs to these types first. Node graph connections are typed — a position port connects only to position inputs. If a new primitive type seems genuinely needed, discuss it before adding it.
+When adding a new feature, map its inputs and outputs to these types first. Timeline entries pass geometry references and parameters — not raw data — between ops. If a new primitive type seems genuinely needed, discuss it before adding it.
 
 ## Technology Targets
 
 - **Server**: Architecture document targets **FastAPI**; current implementation uses **Flask**. Migrate to FastAPI when refactoring the server — do not add new Flask-specific patterns in the meantime.
-- **Node graph**: Target library is **litegraph.js**. The node graph JSON schema is defined in `docs/node_graph_schema.md`. All node graph work must keep the Python API and the graph in sync.
 - **Collision detection**: `trimesh` (Python) and `three-mesh-bvh` (JavaScript) for bounding-volume-hierarchy checks.
 
 ## How I Work With You

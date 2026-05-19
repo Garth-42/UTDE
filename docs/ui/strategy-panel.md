@@ -1,59 +1,80 @@
-# Strategy Panel
+# Operations & Parameters
 
-The **Strategy Panel** appears below the Geometry Browser once geometry is loaded. It configures which toolpath algorithm to run and how the tool should be oriented.
+The right panel in the Setup tab is the primary interface for configuring what the machine does. It routes between the **Library Panel** (template browser) and the **Parameter Editor** (op / orient / scene configuration).
 
-## Selecting a strategy
+---
 
-Choose one of the three built-in strategies from the dropdown:
+## Library Panel
 
-| Strategy | Needs | Description |
+Opens when no timeline entry is selected, or when you click **Add operation**.
+
+Templates are fetched from the server's `/templates` endpoint and grouped by kind:
+
+| Kind | Colour | Description |
 |---|---|---|
-| **Follow Curve** | At least one edge selected | Traces a tool along selected curves |
-| **Raster Fill** | At least one face selected | Fills selected faces with parallel passes |
-| **Contour Parallel** | Face or edge | Offsets the selection boundary inward in concentric passes |
+| `add` | Green | Additive operations (deposition, printing, coating) |
+| `sub` | Orange | Subtractive operations (milling, cutting) |
+| `hyb` | Gradient | Hybrid operations |
+| other | Neutral | Scene actions, utilities |
 
-A warning appears if the required geometry type is not selected.
+Use the search field (`⌘K`) to filter by name or tag. Click a template card to apply it — a new `op` entry is added to the timeline and the panel switches to `ParamEditorOp`.
 
-## Strategy parameters
+---
 
-Parameters update dynamically based on the chosen strategy.
+## ParamEditorOp — Operation Editor
 
-**Feed rate** — always visible, sets the tool speed in mm/min (or the units of your machine config).
+Shows when an `op` entry is selected in the timeline.
 
-| Strategy | Extra parameters |
+### Geometry slots
+
+Each op template declares which geometry it requires (faces, edges, or both). Slots appear at the top of the editor showing whether they are filled:
+
+- Click a slot chip to re-enter pick mode for that slot. The viewport selection filter switches automatically to the required type.
+- Filled slots show a face/edge count chip.
+
+### Parameters
+
+Dynamic fields are rendered from the template's `params` schema. Three field types are supported:
+
+| Type | Renders as |
 |---|---|
-| Follow Curve | **Spacing** — distance between adjacent curve passes |
-| Raster Fill | **Spacing** — distance between raster lines; **Angle °** — raster direction |
-| Contour Parallel | **Stepover** — radial distance between contour passes; **Passes** — number of offsets |
+| `number` | Numeric input with unit label |
+| `select` | Dropdown |
+| `segment` | Segmented button group |
 
-**Path type** — a free-text field forwarded to the toolpath engine (e.g. `"zig_zag"`, `"one_way"`).
+### Preview
 
-## Orientation rules
+Click **▶ Preview** to call `previewActiveOp()` — this compiles the active op plus any visible orient rows above it in isolation, stores the result in `toolpathStore`, and displays it in the viewport. On error it opens the Script overlay with the equivalent Python instead.
 
-Rules are applied in order to compute the tool-axis direction at each point. Add a rule with the **+ Add rule…** dropdown. Reorder rules with the ↑ / ↓ arrows; remove them with ×.
+### Footer stats
+
+Estimated cycle time, add/remove volume, and geometry pick count for the active op.
+
+---
+
+## ParamEditorOrient — Orientation Editor
+
+Shows when an `orient` entry is selected. Orientation rules apply to all `op` entries below this row in the timeline until the next `orient` row.
+
+### Rule chain
+
+Add rules with the **+ Add rule** button. Rules execute in order from top to bottom. Reorder with drag handles; remove with the × button.
 
 | Rule | Parameters | Description |
 |---|---|---|
-| `to_normal` | Surface ID | Aligns tool axis to the surface normal of the specified face |
-| `fixed(i,j,k)` | i, j, k | Sets a constant tool-axis vector |
-| `lead(°)` | Angle ° | Tilts the tool forward in the feed direction |
-| `lag(°)` | Angle ° | Tilts the tool backward in the feed direction |
-| `side_tilt(°)` | Angle ° | Tilts the tool sideways (perpendicular to feed) |
-| `avoid_collision` | Max tilt ° | Dynamically backs off tilt to avoid exceeding the given angle |
+| `fixed` | i, j, k | Sets a constant tool-axis vector |
+| `lead` | Angle ° | Tilts the tool forward in the feed direction |
+| `lag` | Angle ° | Tilts the tool backward in the feed direction |
+| `side_tilt` | Angle ° | Tilts the tool sideways (perpendicular to feed) |
+| `avoid_collision` | Max tilt ° | Dynamically backs off tilt to prevent exceeding the given angle — place last |
 
-Rules are evaluated in the order listed, so place `avoid_collision` last to act as a safety cap on preceding tilt rules.
+A read-only preview below the chain shows the equivalent `.orient(...)` Python call that will be emitted by `timelineToScript.js`.
 
-## Generating a toolpath
+---
 
-Click **GENERATE TOOLPATH** to send the current selection, strategy, and orientation rules to the server. On success:
+## ParamEditorScene — Scene Editor
 
-- The toolpath is added to the Toolpath list.
-- Generated Python code is stored for review in the Code Panel.
-- G-code output (if returned by the server) is available for download.
-- The view switches automatically to **TOOLPATHS** mode.
+Shows when a `scene` entry is selected.
 
-If the server does not yet support `/generate-toolpath`, the UI falls back to client-side Python code generation and opens the Code Panel instead.
-
-## Previewing Python code
-
-Click **Preview Python Code** to generate the equivalent UTDE Python script locally and open it in the Code Panel without running it.
+- **Import CAD**: shows the currently loaded file and a file picker (native dialog in Tauri; HTML5 file input in browser). Loads a STEP file and tessellates it via `/parse-step`.
+- **Clear part**: confirmation step that removes the current geometry from the viewport and resets selection state.

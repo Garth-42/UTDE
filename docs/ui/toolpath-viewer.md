@@ -1,10 +1,16 @@
-# Toolpath Viewer
+# Simulate & Post
 
-Switching to **TOOLPATHS** mode opens a dedicated 3-D canvas and replaces the sidebar with the Toolpath Sidebar.
+After clicking **Run setup**, the timeline is compiled and the UI switches to the Simulate tab. The Post tab becomes available once compilation succeeds.
 
-## 3-D viewport
+---
 
-The viewer is built with React Three Fiber and @react-three/drei.
+## Simulate Tab
+
+A full-width layout with the 3D viewport on the left and playback controls anchored to the bottom.
+
+### 3D Viewport
+
+Built with React Three Fiber. The compiled toolpaths are displayed as coloured lines over the part geometry (colours indicate op kind: green for add, orange for sub, gradient for hybrid).
 
 | Control | Action |
 |---|---|
@@ -12,41 +18,46 @@ The viewer is built with React Three Fiber and @react-three/drei.
 | Right drag / middle drag | Pan |
 | Scroll | Zoom |
 
-A reference grid (500 × 500 mm, 10 mm cells, 50 mm sections) is displayed at Z = 0. A navigation gizmo in the bottom-left corner shows the current camera orientation and lets you snap to axis-aligned views.
+### HUD (top-left)
 
-Camera defaults to a 50° FOV perspective positioned above and behind the origin (`[0, -300, 200]`), suitable for parts sitting near Z = 0.
+Shows live information at the current scrub position:
 
-## Toolpath list
+- Current op name and index
+- Tool identifier
+- Feed rate (mm/min)
+- Spindle speed
 
-Each generated toolpath appears as a named row in the sidebar showing:
+### Playback controls (bottom bar)
 
-- A colour swatch (colours cycle through six presets per session)
-- The toolpath label (`strategy — HH:MM:SS`)
-- The number of waypoints
-
-Click a row to **toggle visibility** of that toolpath in the viewport. Active toolpaths are highlighted; inactive ones are dimmed. Remove a toolpath with the × button.
-
-Use **clear** to remove all toolpaths at once.
-
-## Display options
-
-**Tool Normals** — when enabled, a small vector is drawn at each toolpath point indicating the computed tool-axis direction. Useful for verifying orientation rules.
-
-## Animation
-
-The **▶ PLAY TOOLPATH** button animates the active toolpaths sequentially. The tool head traverses points at a fixed frame rate. Click **■ STOP** to halt playback.
-
-The progress slider lets you scrub to any position (0 – 100 %). Dragging the slider while animating stops playback automatically.
-
-## Stats
-
-The bottom of the sidebar shows total waypoint count and total number of toolpaths loaded in the current session.
-
-## Actions
-
-| Button | Action |
+| Control | Description |
 |---|---|
-| **View Python Code** | Opens the Code Panel showing the last generated script |
-| **⬇ Download G-code** | Downloads `output.nc` (only shown when G-code is available) |
-| **Export Session** | Saves selection and strategy state to a `.json` file for later import |
-| **← Back to STEP** | Returns to STEP IMPORT mode without losing toolpaths |
+| ⏮ Rewind | Jump to the start |
+| ⏯ Play / Pause | Start or pause animation |
+| ⏭ Step | Advance one point |
+| Speed | Segment button: 0.5×, 1×, 4× |
+
+### Scrub track
+
+A horizontal bar spanning the full width. The gradient matches op kind colours; tick marks appear at op boundaries. Click or drag to jump to any position. Time is displayed in MM:SS format.
+
+---
+
+## Post Tab
+
+Two-column layout: G-code on the left, 3D preview on the right.
+
+### Meta bar
+
+Shows machine name, total G-code line count, estimated cycle time, and warning count (if any warnings were produced during compilation).
+
+### G-code view
+
+Syntax-highlighted G-code. Lines are linked to the op that produced each move — useful for tracing unexpected moves back to their source.
+
+### Export
+
+Click **Export .nc** to download the G-code file. In Tauri desktop mode a native save dialog opens; in browser mode a download is triggered. The default filename is derived from the loaded CAD filename.
+
+### Tool Normals
+
+Toggle via the viewport toolbar to draw a small vector at each toolpath point indicating the computed tool-axis direction. Useful for verifying orientation rules.
