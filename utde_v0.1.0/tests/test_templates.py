@@ -70,12 +70,12 @@ class TestMetadataSchema:
             assert "id"      in param
             assert "type"    in param
             assert "default" in param
-            assert param["type"] in {"number", "select", "segment"}
+            assert param["type"] in {"number", "select", "segment", "text"}
 
     def test_requires_entries_have_type_and_label(self):
         for record in list_processes():
             for slot in record["requires"]:
-                assert slot["type"] in {"face", "edge", "vertex"}
+                assert slot["type"] in {"face", "edge", "vertex", "model"}
                 assert "label" in slot
 
     def test_kind_is_string_or_none(self):

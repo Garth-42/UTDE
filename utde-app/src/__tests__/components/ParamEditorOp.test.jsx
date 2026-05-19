@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import ParamEditorOp from "../../components/setup/ParamEditorOp";
 import { useOpsStore } from "../../store/opsStore";
 import { useUiStore } from "../../store/uiStore";
+import { useStepStore } from "../../store/stepStore";
 
 const POCKET = {
   id: "pocket", label: "Pocket", kind: "sub", icon: "pocket",
@@ -16,9 +17,20 @@ const POCKET = {
   est_time: 4.6, est_volume: 2.2,
 };
 
+const PRUSASLICER = {
+  id: "prusaslicer", label: "PrusaSlicer", kind: "add", icon: "add-layer",
+  requires: [{ type: "model", label: "Model to slice", count: 1 }],
+  params: [
+    { id: "layer_height", type: "number",  default: 0.2, unit: "mm", label: "Layer height" },
+    { id: "config_file",  type: "text",    default: "",  label: "Profile path (.ini)",
+      hint: "Optional — load a PrusaSlicer .ini profile" },
+  ],
+  est_time: 45.0, est_volume: 18.0,
+};
+
 vi.mock("../../lib/templateLoader", () => ({
-  useTemplates: () => ({ templates: [POCKET], loading: false, error: null }),
-  getTemplate: (id) => (id === "pocket" ? POCKET : null),
+  useTemplates: () => ({ templates: [POCKET, PRUSASLICER], loading: false, error: null }),
+  getTemplate: (id) => ({ pocket: POCKET, prusaslicer: PRUSASLICER }[id] ?? null),
 }));
 
 const previewActiveOp = vi.fn();
@@ -31,6 +43,7 @@ beforeEach(() => {
   useOpsStore.getState().reset();
   useOpsStore.setState({ entries: [] });
   useUiStore.setState({ tab: "setup", filter: "face", scriptOverlayOpen: false });
+  useStepStore.setState({ fileName: null, selectedFaceIds: new Set(), selectedEdgeIds: new Set(), selectedVertexIds: new Set() });
 });
 
 function setupActivePocket() {
@@ -123,5 +136,59 @@ describe("ParamEditorOp", () => {
     render(<ParamEditorOp />);
     fireEvent.click(screen.getByRole("button", { name: /Preview toolpath/i }));
     await screen.findByText("oof");
+  });
+
+  describe("model slot (prusaslicer)", () => {
+    function setupActivePrusaSlicer() {
+      useOpsStore.getState().applyTemplate(PRUSASLICER);
+    }
+
+    it("shows 'Click to select model' when model slot is empty", () => {
+      setupActivePrusaSlicer();
+      render(<ParamEditorOp />);
+      expect(screen.getByText(/Click to select model/i)).toBeInTheDocument();
+    });
+
+    it("shows filename when model slot is filled with __model__", () => {
+      setupActivePrusaSlicer();
+      useStepStore.setState({ fileName: "bracket.step" });
+      useOpsStore.getState().setGeometryForSlot(0, 0, ["__model__"]);
+      render(<ParamEditorOp />);
+      expect(screen.getByText("bracket.step")).toBeInTheDocument();
+    });
+
+    it("shows 'model' as the fallback when slot filled but no file loaded", () => {
+      setupActivePrusaSlicer();
+      useOpsStore.getState().setGeometryForSlot(0, 0, ["__model__"]);
+      render(<ParamEditorOp />);
+      expect(screen.getByText("model")).toBeInTheDocument();
+    });
+
+    it("slot shows 'whole model' in meta row", () => {
+      setupActivePrusaSlicer();
+      render(<ParamEditorOp />);
+      expect(screen.getByText("whole model")).toBeInTheDocument();
+    });
+  });
+
+  describe("text param field", () => {
+    function setupActivePrusaSlicer() {
+      useOpsStore.getState().applyTemplate(PRUSASLICER);
+    }
+
+    it("renders a text input for config_file param", () => {
+      setupActivePrusaSlicer();
+      render(<ParamEditorOp />);
+      const textInputs = screen.getAllByRole("textbox");
+      expect(textInputs.length).toBeGreaterThan(0);
+    });
+
+    it("text input fires updateParam with the typed value", () => {
+      setupActivePrusaSlicer();
+      render(<ParamEditorOp />);
+      const textInputs = screen.getAllByRole("textbox");
+      fireEvent.change(textInputs[0], { target: { value: "/home/user/profile.ini" } });
+      expect(useOpsStore.getState().entries[0].params.config_file).toBe("/home/user/profile.ini");
+    });
   });
 });

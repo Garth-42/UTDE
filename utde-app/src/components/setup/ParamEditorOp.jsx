@@ -14,6 +14,7 @@ import { useState } from "react";
 import I from "../icons";
 import { useOpsStore } from "../../store/opsStore";
 import { useUiStore } from "../../store/uiStore";
+import { useStepStore } from "../../store/stepStore";
 import { useToolpathStore } from "../../store/toolpathStore";
 import { getTemplate } from "../../lib/templateLoader";
 import { previewActiveOp } from "../../lib/timelineCompiler";
@@ -215,6 +216,7 @@ export default function ParamEditorOp() {
   const cancelPrompt  = useOpsStore((s) => s.cancelPrompt);
   const setFilter   = useUiStore((s) => s.setFilter);
   const isCompiling = useToolpathStore((s) => s.isCompiling);
+  const fileName    = useStepStore((s) => s.fileName);
 
   const [previewError, setPreviewError] = useState(null);
 
@@ -291,6 +293,7 @@ export default function ParamEditorOp() {
             {meta.requires.map((req, i) => {
               const picks = op.geometry?.[i] || [];
               const filled = picks.length > 0;
+              const isModelSlot = req.type === "model";
               return (
                 <div
                   key={i}
@@ -302,12 +305,16 @@ export default function ParamEditorOp() {
                   <div>
                     <div style={STYLES.slotLabel}>{req.label}</div>
                     <div style={STYLES.slotMeta}>
-                      {req.type}{req.count === 0 ? " · multi" : " · 1"}
+                      {isModelSlot ? "whole model" : `${req.type}${req.count === 0 ? " · multi" : " · 1"}`}
                     </div>
                   </div>
                   {filled
-                    ? <span style={STYLES.slotPicked}>{picks.join(", ")}</span>
-                    : <span style={STYLES.slotPlaceholder}>Click to pick →</span>}
+                    ? <span style={STYLES.slotPicked}>
+                        {isModelSlot ? (fileName || "model") : picks.join(", ")}
+                      </span>
+                    : <span style={STYLES.slotPlaceholder}>
+                        {isModelSlot ? "Click to select model →" : "Click to pick →"}
+                      </span>}
                 </div>
               );
             })}
@@ -431,6 +438,26 @@ function ParamField({ param, value, onChange }) {
               {o}
             </button>
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (param.type === "text") {
+    return (
+      <div style={STYLES.fieldFull}>
+        <label style={STYLES.label}>
+          {param.label || param.id}
+          {param.hint && <span style={STYLES.hint}>{param.hint}</span>}
+        </label>
+        <div style={STYLES.input}>
+          <input
+            type="text"
+            value={value ?? ""}
+            placeholder={param.hint || ""}
+            onChange={(e) => onChange(e.target.value)}
+            style={{ ...STYLES.inputEl, textAlign: "left", fontFamily: "var(--font-mono)", fontSize: 11 }}
+          />
         </div>
       </div>
     );

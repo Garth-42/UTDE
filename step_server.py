@@ -47,6 +47,11 @@ except Exception as _e:                 # pragma: no cover — defensive
     _TEMPLATES_LOADED = False
     _TEMPLATES_LOAD_ERROR = str(_e)
 
+# Path of the most-recently parsed STEP/STP file. Set by parse_step and
+# parse_step_from_path so that whole-model templates (e.g. prusaslicer) can
+# receive the model path when the user selects "__model__" in the UI.
+_LAST_MODEL_PATH = None
+
 
 def _apply_cors(flask_app):
     """Apply CORS headers for development. Allows all origins (local server only)."""
@@ -534,6 +539,9 @@ def parse_step():
         if reader.ReadFile(tmp_path) != IFSelect_RetDone:
             return jsonify({"error": "STEP parser failed — check file is valid STEP/STP"}), 400
 
+        global _LAST_MODEL_PATH
+        _LAST_MODEL_PATH = tmp_path
+
         for i in range(1, reader.NbRootsForTransfer() + 1):
             reader.TransferRoot(i)
         shape = reader.OneShape()
@@ -815,13 +823,20 @@ def compile_timeline():
                 warnings.append(f"entry {idx}: unknown template '{tpl_id}'")
                 continue
 
-            # Resolve picked geometry IDs into Surface/Curve objects, slot by slot
+            # Resolve picked geometry IDs into Surface/Curve objects, slot by slot.
+            # The sentinel "__model__" means "the currently loaded model file";
+            # its path is injected into entry_params so whole-model templates
+            # (e.g. prusaslicer) can find it via params["_model_path"].
             resolved = []
             first_surface = None
+            entry_params = dict(entry.get("params", {}) or {})
             for slot_picks in entry.get("geometry", []) or []:
                 slot = []
                 for gid in slot_picks:
-                    if gid in surfaces:
+                    if gid == "__model__":
+                        if _LAST_MODEL_PATH:
+                            entry_params.setdefault("_model_path", _LAST_MODEL_PATH)
+                    elif gid in surfaces:
                         slot.append(surfaces[gid])
                         if first_surface is None:
                             first_surface = surfaces[gid]
@@ -833,7 +848,7 @@ def compile_timeline():
                 op_collection = fn(
                     model=None,
                     geometry=resolved,
-                    params=entry.get("params", {}) or {},
+                    params=entry_params,
                 )
             except TypeError:
                 # Older template signatures: fn(model, params) only
@@ -1301,6 +1316,9 @@ def parse_step_from_path():
         reader = STEPControl_Reader()
         if reader.ReadFile(path) != IFSelect_RetDone:
             return jsonify({"error": "STEP parser failed — check file is valid STEP/STP"}), 400
+
+        global _LAST_MODEL_PATH
+        _LAST_MODEL_PATH = path
 
         for i in range(1, reader.NbRootsForTransfer() + 1):
             reader.TransferRoot(i)
