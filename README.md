@@ -7,3 +7,41 @@ Think depositing glue on a surface during a build... you need to be able to have
 For Docs: https://garth-42.github.io/UTDE/
 
 This is very much WIP, and in its current state not tested in any rigorous way and is very much just me playing around with Claude.
+
+## Run with Docker
+
+The repo ships a self-contained image that bundles the Python/pythonocc backend
+and the compiled React frontend, so the whole app deploys from a fresh clone
+with no local toolchain:
+
+```bash
+# Build and run (single port serves both the SPA and the API)
+docker compose up --build
+# → open http://localhost:5174
+```
+
+Or with plain Docker:
+
+```bash
+docker build -t utde .
+docker run --rm -p 5174:5174 utde
+# → open http://localhost:5174
+```
+
+The image builds the frontend (`npm run build`) at image-build time and serves
+the static bundle directly from Flask — Node is **not** needed at runtime. A
+single Flask process handles both the `/api/*` requests and the SPA on port
+`5174`.
+
+**Configuration** (environment variables):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `UTDE_HOST` | `0.0.0.0` | Interface the server binds to inside the container |
+| `UTDE_PORT` | `5174` | Port the server listens on |
+| `UTDE_STATIC_DIR` | `/app/utde-app/dist` | Compiled frontend bundle to serve |
+
+> This image is the **web** deployment target. The Tauri desktop shell and the
+> Xvfb/VNC stack are development-only and live in
+> `.devcontainer/devcontainer.json` + `launch.sh`; they are intentionally not
+> part of the Docker image.

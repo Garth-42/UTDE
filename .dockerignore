@@ -1,0 +1,42 @@
+# Keep the build context small and reproducible. The frontend is built inside
+# the image, so local build artifacts and dependencies must not leak in.
+
+.git
+.github
+.devcontainer
+
+# Node / frontend (reinstalled + rebuilt in the image)
+**/node_modules
+utde-app/dist
+utde-app/src-tauri/target
+
+# Python caches and editable-install metadata
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+.pytest_cache
+venv
+.venv
+
+# Tauri / PyInstaller desktop build outputs (not used by the web image)
+dist
+build
+*.spec.bak
+
+# Docs site output
+site
+
+# Local tooling / secrets
+.claude
+.env
+.env.local
+logs
+
+# OS cruft
+.DS_Store
+
+# CAD test fixtures (also gitignored)
+*.step
+*.stp
+*.STEP
+*.STP
