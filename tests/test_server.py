@@ -4,6 +4,58 @@ import json
 import pytest
 
 
+# ── static SPA serving (Docker / production single-process deployment) ─────────
+
+
+class TestStaticServing:
+    """`_enable_static_serving` lets one Flask process serve the built SPA and
+    the API together (no Vite proxy). Exercised on a throwaway app so the
+    catch-all route never leaks into the shared `client` fixture."""
+
+    @pytest.fixture()
+    def spa_client(self, tmp_path):
+        import step_server
+        from flask import Flask, jsonify
+
+        app = Flask("spa_test")
+
+        @app.route("/health")
+        def _health():
+            return jsonify(ok=True)
+
+        (tmp_path / "index.html").write_text("<html>UTDE SPA</html>")
+        assets = tmp_path / "assets"
+        assets.mkdir()
+        (assets / "app.js").write_text("console.log('utde')")
+
+        step_server._enable_static_serving(app, str(tmp_path))
+        with app.test_client() as c:
+            yield c
+
+    def test_root_serves_index_html(self, spa_client):
+        res = spa_client.get("/")
+        assert res.status_code == 200
+        assert b"UTDE SPA" in res.data
+
+    def test_real_asset_is_served(self, spa_client):
+        res = spa_client.get("/assets/app.js")
+        assert res.status_code == 200
+        assert b"console.log('utde')" in res.data
+
+    def test_unknown_path_falls_back_to_index(self, spa_client):
+        # Client-side routes must resolve to index.html for SPA routing.
+        res = spa_client.get("/some/client/route")
+        assert res.status_code == 200
+        assert b"UTDE SPA" in res.data
+
+    def test_api_prefix_is_stripped_to_root_route(self, spa_client):
+        # Browser-mode frontend calls /api/* ; middleware strips it so the
+        # existing root-level API routes handle the request.
+        res = spa_client.get("/api/health")
+        assert res.status_code == 200
+        assert json.loads(res.data)["ok"] is True
+
+
 # ── /health ───────────────────────────────────────────────────────────────────
 
 

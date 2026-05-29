@@ -1,0 +1,19 @@
+# Convenience wrapper around the Dockerfile for one-command deployment:
+#
+#   docker compose up --build
+#   → open http://localhost:5174
+#
+services:
+  utde:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: utde:latest
+    ports:
+      - "5174:5174"
+    environment:
+      # Bind all interfaces inside the container and serve the bundled SPA.
+      UTDE_HOST: "0.0.0.0"
+      UTDE_PORT: "5174"
+      UTDE_STATIC_DIR: "/app/utde-app/dist"
+    restart: unless-stopped

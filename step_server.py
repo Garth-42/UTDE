@@ -59,6 +59,46 @@ def _apply_cors(flask_app):
         _CORS(flask_app, origins="*")
 
 
+def _enable_static_serving(flask_app, static_dir):
+    """Serve the built React SPA from ``static_dir`` alongside the JSON API.
+
+    Used by the standalone Docker / production deployment, where a single Flask
+    process serves both the compiled frontend bundle and the API (there is no
+    Vite dev-server proxy). In browser mode the frontend calls the backend at
+    ``/api/*`` (see ``getBaseUrl()`` in ``utde-app/src/lib/backend.js``), so a
+    thin WSGI middleware strips the leading ``/api`` segment and the existing
+    root-level routes (``/health``, ``/machines`` …) handle the request
+    unchanged. Every other path serves a real file from ``static_dir`` when one
+    exists, falling back to ``index.html`` so client-side routing works.
+    """
+    from flask import send_from_directory
+
+    static_dir = os.path.abspath(static_dir)
+
+    # Strip a leading /api prefix so /api/health → /health, etc.
+    _inner_wsgi = flask_app.wsgi_app
+
+    def _strip_api_prefix(environ, start_response):
+        path = environ.get("PATH_INFO", "")
+        if path == "/api" or path.startswith("/api/"):
+            environ["PATH_INFO"] = path[len("/api"):] or "/"
+        return _inner_wsgi(environ, start_response)
+
+    flask_app.wsgi_app = _strip_api_prefix
+
+    # Catch-all SPA route. Registered last; Werkzeug prefers the more-specific
+    # API rules (e.g. /health) over this variable rule, so the API still wins.
+    @flask_app.route("/", defaults={"path": ""})
+    @flask_app.route("/<path:path>")
+    def _serve_spa(path):
+        candidate = os.path.join(static_dir, path)
+        if path and os.path.isfile(candidate):
+            return send_from_directory(static_dir, path)
+        return send_from_directory(static_dir, "index.html")
+
+    return flask_app
+
+
 def _extract_all_boundary_loops(vertices_flat, indices_flat):
     """
     Return all boundary loops of a triangle mesh as a list of loops, where each
@@ -1361,11 +1401,26 @@ def parse_step_from_path():
         return jsonify({"error": f"Parse error: {str(e)}"}), 500
 
 
+# Standalone / Docker deployment: when UTDE_STATIC_DIR points at a built
+# frontend bundle, serve it from this same process so a single container can
+# host both the SPA and the API. No-op for dev (Vite proxy) and Tauri modes,
+# which never set this variable.
+_STATIC_DIR = os.environ.get("UTDE_STATIC_DIR")
+if _STATIC_DIR and os.path.isdir(_STATIC_DIR):
+    _enable_static_serving(app, _STATIC_DIR)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="UTDE STEP Server")
     parser.add_argument(
-        "--port", type=int, default=5174,
-        help="Port to listen on (default: 5174). Tauri passes a dynamic free port.",
+        "--host", default=os.environ.get("UTDE_HOST", "127.0.0.1"),
+        help="Interface to bind (default: 127.0.0.1, or $UTDE_HOST). "
+             "Use 0.0.0.0 to accept connections from outside a container.",
+    )
+    parser.add_argument(
+        "--port", type=int, default=int(os.environ.get("UTDE_PORT", "5174")),
+        help="Port to listen on (default: 5174, or $UTDE_PORT). "
+             "Tauri passes a dynamic free port.",
     )
     parser.add_argument(
         "--no-cors", action="store_true",
@@ -1381,7 +1436,7 @@ if __name__ == "__main__":
     if not args.no_cors:
         _apply_cors(app)
 
-    print(f"UTDE STEP Server → http://localhost:{args.port}")
+    print(f"UTDE STEP Server → http://{args.host}:{args.port}")
     print(f"pythonocc-core: {'available' if OCC_AVAILABLE else 'NOT FOUND'}")
     sys.stdout.flush()
 
@@ -1393,7 +1448,7 @@ if __name__ == "__main__":
         from werkzeug._reloader import run_with_reloader
 
         def _serve():
-            srv = make_server("127.0.0.1", args.port, app, threaded=True)
+            srv = make_server(args.host, args.port, app, threaded=True)
             print("UTDE_SERVER_READY", flush=True)
             srv.serve_forever()
 
@@ -1401,6 +1456,6 @@ if __name__ == "__main__":
     else:
         # Production / Tauri sidecar: single process, no file watching.
         from werkzeug.serving import make_server
-        srv = make_server("127.0.0.1", args.port, app, threaded=True)
+        srv = make_server(args.host, args.port, app, threaded=True)
         print("UTDE_SERVER_READY", flush=True)
         srv.serve_forever()
