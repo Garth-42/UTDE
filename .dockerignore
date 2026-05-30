@@ -1,11 +1,12 @@
-# Keep the build context small and reproducible. The frontend is built inside
-# the image, so local build artifacts and dependencies must not leak in.
+# Keep the build context small. The image bakes the toolchain and clones the
+# repo at runtime (see entrypoint.sh), so the build itself only needs
+# utde_v0.1.0/, docs/requirements.txt, and entrypoint.sh — nothing else here
+# needs to be uploaded to the Docker daemon.
 
 .git
 .github
-.devcontainer
 
-# Node / frontend (reinstalled + rebuilt in the image)
+# Node / frontend (installed on the pod, not at build time)
 **/node_modules
 utde-app/dist
 utde-app/src-tauri/target
@@ -18,13 +19,11 @@ utde-app/src-tauri/target
 venv
 .venv
 
-# Tauri / PyInstaller desktop build outputs (not used by the web image)
+# Desktop / docs build outputs
 dist
 build
-*.spec.bak
-
-# Docs site output
 site
+*.spec.bak
 
 # Local tooling / secrets
 .claude
