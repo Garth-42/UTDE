@@ -34,7 +34,9 @@ echo "    sshd started"
 echo "==> [2/4] Starting Ollama"
 mkdir -p "$OLLAMA_MODELS"
 ollama serve > /var/log/ollama.log 2>&1 &
-( sleep 5; ollama pull qwen3:8b ) > /var/log/ollama-pull.log 2>&1 &
+# Pull qwen3.6 (~24GB) once. It lands on the /workspace volume (OLLAMA_MODELS),
+# so it persists across pods and only downloads on the first boot of a volume.
+( sleep 5; ollama pull qwen3.6 ) > /var/log/ollama-pull.log 2>&1 &
 
 echo "==> [3/4] Ensuring repo is present"
 if [ ! -d "$REPO" ]; then
