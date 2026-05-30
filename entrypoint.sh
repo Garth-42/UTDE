@@ -34,9 +34,45 @@ echo "    sshd started"
 echo "==> [2/4] Starting Ollama"
 mkdir -p "$OLLAMA_MODELS"
 ollama serve > /var/log/ollama.log 2>&1 &
-# Pull qwen3.6 (~24GB) once. It lands on the /workspace volume (OLLAMA_MODELS),
-# so it persists across pods and only downloads on the first boot of a volume.
-( sleep 5; ollama pull qwen3.6 ) > /var/log/ollama-pull.log 2>&1 &
+
+# Pull qwen3.6 (~24GB) in the background, once. It lands on the /workspace
+# volume (OLLAMA_MODELS), so it persists across pods and only downloads on the
+# first boot of a volume. Done robustly because the naive "sleep 5 then pull"
+# races the server startup and silently loses the model on any transient error:
+#   - wait until `ollama serve` is actually answering before pulling
+#   - skip the download if the model is already on the volume
+#   - retry a few times so a flaky network doesn't leave the pod model-less
+pull_model() {
+  local model="qwen3.6"
+
+  echo "waiting for ollama server to accept requests..."
+  for _ in $(seq 1 60); do
+    ollama list >/dev/null 2>&1 && break
+    sleep 2
+  done
+  if ! ollama list >/dev/null 2>&1; then
+    echo "ERROR: ollama server never came up (see /var/log/ollama.log)"
+    return 1
+  fi
+
+  if ollama list 2>/dev/null | grep -qi "$model"; then
+    echo "model '$model' already present on the volume — skipping pull"
+    return 0
+  fi
+
+  for attempt in 1 2 3; do
+    echo "pulling '$model' (attempt $attempt/3)..."
+    if ollama pull "$model"; then
+      echo "pull of '$model' complete"
+      return 0
+    fi
+    echo "pull attempt $attempt failed; retrying in 15s"
+    sleep 15
+  done
+  echo "ERROR: failed to pull '$model' after 3 attempts"
+  return 1
+}
+pull_model > /var/log/ollama-pull.log 2>&1 &
 
 echo "==> [3/4] Ensuring repo is present"
 if [ ! -d "$REPO" ]; then
