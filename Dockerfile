@@ -1,71 +1,104 @@
-# syntax=docker/dockerfile:1
+# ============================================================================
+# UTDE reproducible dev image
 #
-# UTDE — Universal Toolpath Design Environment
-# Self-contained deployment image: a single container that serves the compiled
-# React frontend and the Flask/pythonocc API from one port (5174).
+# This bakes the environment your .devcontainer/devcontainer.json used to build
+# at runtime — but into a real Docker image, because RunPod runs a plain image
+# and does NOT understand devcontainer.json.
 #
-#   docker build -t utde .
-#   docker run --rm -p 5174:5174 utde
-#   → open http://localhost:5174
+# What's baked in here (the slow stuff, installed once at build time):
+#   - conda (miniforge) base env: Python 3.12, pythonocc-core, numpy, scipy, ...
+#   - the Python libs that don't need the repo (flask, pytest, pyclipper, ...)
+#   - your project's Python dependencies + docs requirements
+#   - Node 24, Rust + rust-analyzer, GitHub CLI, Claude Code, OpenCode, Ollama
+#   - all the webkit/gtk system libraries the Tauri app needs
+#   - an SSH server so VS Code Remote-SSH can connect
 #
-# This is the "web only" deployment target. It does NOT include the Tauri
-# desktop shell or the Xvfb/VNC stack used by the dev container — those are for
-# local development (see .devcontainer/devcontainer.json and launch.sh).
+# What is NOT baked in (handled on the pod by entrypoint.sh, because it's tied
+# to your live code on the network volume):
+#   - cloning the repo into /workspace
+#   - `pip install -e` of your package (fast: deps already present)
+#   - `npm install` for utde-app (node_modules persists on the volume)
+# ============================================================================
 
-# ───────────────────────────────────────────────────────────────────────────
-# Stage 1 — build the React frontend into a static bundle
-# ───────────────────────────────────────────────────────────────────────────
-FROM node:24-bookworm-slim AS frontend
-
-WORKDIR /app/utde-app
-
-# Install dependencies first so this layer caches across source-only changes.
-COPY utde-app/package.json utde-app/package-lock.json ./
-RUN npm ci
-
-COPY utde-app/ ./
-RUN npm run build          # → /app/utde-app/dist
-
-# ───────────────────────────────────────────────────────────────────────────
-# Stage 2 — Python/CAD runtime (mirrors the dev container's conda base env)
-# ───────────────────────────────────────────────────────────────────────────
-FROM condaforge/miniforge3:latest AS runtime
+FROM condaforge/miniforge3:latest
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1 \
-    UTDE_HOST=0.0.0.0 \
-    UTDE_PORT=5174 \
-    UTDE_STATIC_DIR=/app/utde-app/dist
+    TZ=America/Chicago \
+    RUSTUP_HOME=/opt/rust/rustup \
+    CARGO_HOME=/opt/rust/cargo \
+    PATH=/opt/rust/cargo/bin:/root/.opencode/bin:/opt/conda/bin:$PATH
 
-# CAD / numerics stack — only available from conda-forge (pythonocc-core).
+# ---- System packages -------------------------------------------------------
+# zstd is required by the Ollama installer (you hit this earlier).
+# The lib*-dev packages are the Tauri/webkit GUI build dependencies.
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+      git curl ca-certificates build-essential pkg-config \
+      lsof netcat-openbsd zstd pciutils \
+      openssh-server \
+      xvfb x11vnc openbox novnc websockify \
+      libglib2.0-dev libwebkit2gtk-4.1-dev libgtk-3-dev \
+      libayatana-appindicator3-dev librsvg2-dev libjavascriptcoregtk-4.1-dev \
+    && ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- Conda base environment (replaces the miniforge base image + conda step)
 RUN conda install -y -n base -c conda-forge \
-        python=3.12 pythonocc-core numpy scipy pyyaml && \
-    conda clean -afy
+      python=3.12 pythonocc-core numpy scipy pyyaml gh \
+    && conda clean -afy
 
-WORKDIR /app
+# ---- Node 24 (replaces the devcontainer "node" feature) --------------------
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install the toolpath engine (editable) plus the server's runtime deps.
-COPY utde_v0.1.0/ ./utde_v0.1.0/
-RUN conda run -n base pip install --no-cache-dir flask flask-cors pyclipper && \
-    conda run -n base pip install --no-cache-dir -e ./utde_v0.1.0/
+# ---- Rust + rust-analyzer (replaces the "rust" feature) --------------------
+RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable \
+    && rustup component add rust-analyzer
 
-# Application code. step_server.py resolves machines/ and utde_v0.1.0/ relative
-# to its own location, so this layout must be preserved.
-COPY step_server.py ./
-COPY machines/ ./machines/
+# ---- Claude Code + OpenCode (replaces the "claude-code" feature + your
+#      postCreateCommand opencode install) ------------------------------------
+RUN npm install -g @anthropic-ai/claude-code \
+    && curl -fsSL https://opencode.ai/install | bash
 
-# Compiled frontend from stage 1 (served from $UTDE_STATIC_DIR).
-COPY --from=frontend /app/utde-app/dist ./utde-app/dist
+# ---- Ollama ----------------------------------------------------------------
+RUN curl -fsSL https://ollama.com/install.sh | sh
 
-EXPOSE 5174
+# ---- Python libraries (the parts of postCreateCommand that don't need code) -
+RUN pip install --no-cache-dir flask flask-cors pytest pyclipper
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
-    CMD conda run -n base python -c \
-        "import os,urllib.request,sys; \
-         urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('UTDE_PORT','5174')+'/health'); \
-         sys.exit(0)" || exit 1
+# ---- Your project's Python dependencies ------------------------------------
+# We copy ONLY the dependency sources so this layer is cached unless they change.
+# Installing the package here (non-editable) pulls its dependencies into the
+# image so they persist; entrypoint.sh later re-installs it editable against
+# your live code on the volume (which is fast because deps already exist).
+# NOTE: adjust these paths if your repo layout differs.
+COPY utde_v0.1.0/ /tmp/utde_pkg/
+COPY docs/requirements.txt /tmp/docs-requirements.txt
+# docs/requirements.txt ends with `-e ./utde_v0.1.0`, a repo-relative editable
+# install that does not resolve inside the build context — and the package is
+# already installed from /tmp/utde_pkg above — so strip that self-reference and
+# install only the remaining docs deps (mkdocs, etc.).
+RUN pip install --no-cache-dir /tmp/utde_pkg/ \
+    && grep -v '^[[:space:]]*-e' /tmp/docs-requirements.txt > /tmp/docs-deps.txt \
+    && pip install --no-cache-dir -r /tmp/docs-deps.txt \
+    && rm -rf /tmp/utde_pkg /tmp/docs-requirements.txt /tmp/docs-deps.txt
 
-# `conda run` ensures the base env's interpreter and shared libs (pythonocc) are
-# on PATH. --no-capture-output streams logs straight to the container's stdout.
-CMD ["conda", "run", "--no-capture-output", "-n", "base", \
-     "python", "step_server.py", "--host", "0.0.0.0"]
+# ---- Login-shell environment for SSH sessions ------------------------------
+# sshd starts fresh login shells that don't inherit Docker ENV, so write a
+# profile snippet that sets everything up for interactive terminals.
+RUN printf '%s\n' \
+    'export RUSTUP_HOME=/opt/rust/rustup' \
+    'export CARGO_HOME=/opt/rust/cargo' \
+    'export OLLAMA_MODELS=/workspace/.ollama/models' \
+    'export PATH=/opt/rust/cargo/bin:/root/.opencode/bin:/opt/conda/bin:$PATH' \
+    'source /opt/conda/etc/profile.d/conda.sh' \
+    'conda activate base' \
+    > /etc/profile.d/10-utde-env.sh
+
+# ---- Entrypoint ------------------------------------------------------------
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Clear any inherited entrypoint so RunPod's start command (or our CMD) runs cleanly.
+ENTRYPOINT []
+CMD ["/usr/local/bin/entrypoint.sh"]
