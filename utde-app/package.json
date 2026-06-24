@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "npm run sync-machines && npm run build-wheel",
     "build": "vite build",
     "preview": "vite preview",
+    "sync-machines": "node scripts/sync-machines.mjs",
+    "build-wheel": "bash scripts/build-wheel.sh",
     "test": "vitest run",
     "test:watch": "vitest"
   },

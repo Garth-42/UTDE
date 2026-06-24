@@ -227,6 +227,42 @@ class TestGenerateToolpath:
         assert offset["points"][0]["x"] == pytest.approx(base["points"][0]["x"] - 10)
 
 
+# ── run_script (in-process) ──────────────────────────────────────────────────
+
+class TestRunScript:
+    def test_empty_code(self):
+        out = webapi.run_script("   ")
+        assert out["success"] is False
+
+    def test_simple_print(self):
+        out = webapi.run_script("print('hello world')")
+        assert out["success"] is True
+        assert "hello world" in out["stdout"]
+
+    def test_exception_sets_failure_and_stderr(self):
+        out = webapi.run_script("raise ValueError('boom')")
+        assert out["success"] is False
+        assert "boom" in out["stderr"]
+
+    def test_utde_import_works(self):
+        out = webapi.run_script(
+            "from toolpath_engine.core.geometry import Curve\n"
+            "c = Curve.line((0,0,0),(10,0,0), num_points=5)\n"
+            "print(len(c))\n"
+        )
+        assert out["success"] is True
+        assert out["stdout"].strip() == "5"
+
+    def test_gcode_file_captured(self):
+        out = webapi.run_script(
+            "open('out.nc', 'w').write('G0 Z50\\nM30\\n')\n"
+            "print('done')\n"
+        )
+        assert out["success"] is True
+        assert out["gcode"] is not None
+        assert "M30" in out["gcode"]
+
+
 # ── compile_timeline ─────────────────────────────────────────────────────────
 
 class TestCompileTimeline:

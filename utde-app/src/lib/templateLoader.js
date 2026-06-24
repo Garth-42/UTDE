@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { getBaseUrl } from "./backend";
+import runtime from "./runtime";
 
 let _cache = null;
 let _inflight = null;
@@ -21,16 +21,12 @@ export async function fetchTemplates() {
   if (_inflight) return _inflight;
 
   _inflight = (async () => {
-    const base = await getBaseUrl();
-    const res = await fetch(`${base}/templates`);
-    if (!res.ok) {
+    try {
+      _cache = await runtime.listTemplates();
+      return _cache;
+    } finally {
       _inflight = null;
-      throw new Error(`/templates returned ${res.status}`);
     }
-    const body = await res.json();
-    _cache = body.templates || [];
-    _inflight = null;
-    return _cache;
   })();
 
   return _inflight;

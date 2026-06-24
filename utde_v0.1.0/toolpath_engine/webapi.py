@@ -338,6 +338,68 @@ def lint_script(code):
         return {"errors": [{"line": 0, "col": 0, "message": str(e)}]}
 
 
+# ── Run script (in-process) ──────────────────────────────────────────────────
+
+def run_script(code):
+    """Execute a UTDE Python script **in-process** and capture its output.
+
+    This is the browser/Pyodide counterpart to the Flask server's subprocess
+    runner: there is no separate process in WASM, so the script runs in this
+    interpreter with stdout/stderr captured and a scratch working directory for
+    any G-code (``.nc`` / ``.gcode``) it writes. Returns
+    ``{success, stdout, stderr, gcode}``.
+
+    Safe in the browser (sandboxed to the user's own tab); the server keeps its
+    isolated subprocess implementation.
+    """
+    import io
+    import os
+    import tempfile
+    import contextlib
+    import traceback
+
+    if not (code or "").strip():
+        return {"success": False, "stdout": "", "stderr": "No code provided", "gcode": None}
+
+    out, err = io.StringIO(), io.StringIO()
+    gcode = None
+    prev_cwd = os.getcwd()
+    tmpdir = tempfile.mkdtemp(prefix="utde_script_")
+    success = True
+    try:
+        os.chdir(tmpdir)
+        ns = {"__name__": "__main__", "__builtins__": __builtins__}
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                exec(compile(code, "<script>", "exec"), ns)
+            except SystemExit:
+                pass
+            except BaseException:
+                success = False
+                err.write(traceback.format_exc())
+        # Capture any G-code the script wrote to the scratch dir.
+        try:
+            for fname in os.listdir(tmpdir):
+                if fname.endswith((".nc", ".gcode")):
+                    with open(os.path.join(tmpdir, fname)) as gf:
+                        gcode = gf.read()
+                    break
+        except Exception:
+            pass
+    finally:
+        try:
+            os.chdir(prev_cwd)
+        except Exception:
+            pass
+
+    return {
+        "success": success,
+        "stdout": out.getvalue()[-8000:],
+        "stderr": err.getvalue()[-4000:],
+        "gcode": gcode,
+    }
+
+
 # ── Generate toolpath ────────────────────────────────────────────────────────
 
 def generate_toolpath(payload):
