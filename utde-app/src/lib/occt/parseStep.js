@@ -9,14 +9,8 @@
  * constructors / enum objects follow the opencascade.js (donalffons) API.
  *
  * NOTE: the exact OCC call surface must be verified against a real
- * opencascade.js build in a browser; the analytic-parameter and triangulation
- * extraction below mirrors the proven Python implementation.
- *
- * KNOWN GAP: faces do not yet emit `inner_loops` (hole boundaries from OCC wire
- * topology). The outer boundary is still derived in Python from the emitted
- * triangulation (webapi.extract_all_boundary_loops), so raster fill clips to the
- * face edge; only interior holes from STEP are not yet honored. Tracked as a
- * Phase 2 follow-up (needs breptools_OuterWire + WIRE traversal via opencascade.js).
+ * opencascade.js build in a browser; the analytic-parameter, triangulation, and
+ * inner-loop (hole) extraction below mirror the proven Python implementation.
  */
 
 import {
@@ -164,7 +158,7 @@ export function tessellateFace(oc, face, idx) {
   const { vertices, indices } = readTriangulation(oc, face);
   if (!vertices.length) return null;
 
-  return {
+  const rec = {
     id: idx,
     type,
     vertices,
@@ -172,6 +166,31 @@ export function tessellateFace(oc, face, idx) {
     params,
     centroid: flatCentroid(vertices),
   };
+
+  // Holes from OCC wire topology (authoritative; the toolpath engine maps these
+  // to surface.interior_loops so raster fill avoids them).
+  let inner = [];
+  try {
+    inner = extractInnerLoops(oc, face);
+  } catch (e) {
+    inner = [];
+  }
+  if (inner.length) rec.inner_loops = inner;
+
+  return rec;
+}
+
+/** Sample a curve adaptor uniformly in parameter space → [[x,y,z], ...]. */
+function sampleCurveAdaptor(curve, numPoints) {
+  const t0 = curve.FirstParameter();
+  const t1 = curve.LastParameter();
+  const pts = [];
+  for (let i = 0; i < numPoints; i++) {
+    const t = numPoints <= 1 ? t0 : t0 + ((t1 - t0) * i) / (numPoints - 1);
+    const p = curve.Value(t);
+    pts.push([p.X(), p.Y(), p.Z()]);
+  }
+  return pts;
 }
 
 /** Build the JSON record for one edge (or null when it can't be sampled). */
@@ -180,20 +199,12 @@ export function tessellateEdge(oc, edge, idx, numPoints = EDGE_SAMPLES) {
   const gtype = curve.GetType();
   const type = curveTypeName(gtype, oc.GeomAbs_CurveType);
   const params = curveParams(oc, curve, type);
-
-  const t0 = curve.FirstParameter();
-  const t1 = curve.LastParameter();
-  const verts = [];
-  for (let i = 0; i < numPoints; i++) {
-    const t = numPoints === 1 ? t0 : t0 + ((t1 - t0) * i) / (numPoints - 1);
-    const p = curve.Value(t);
-    verts.push(p.X(), p.Y(), p.Z());
-  }
+  const pts = sampleCurveAdaptor(curve, numPoints);
   del(curve);
 
-  if (!verts.length) return null;
-  const pts = [];
-  for (let i = 0; i < verts.length; i += 3) pts.push([verts[i], verts[i + 1], verts[i + 2]]);
+  if (!pts.length) return null;
+  const verts = [];
+  for (const p of pts) verts.push(p[0], p[1], p[2]);
   return {
     id: idx,
     type,
@@ -201,6 +212,70 @@ export function tessellateEdge(oc, edge, idx, numPoints = EDGE_SAMPLES) {
     params,
     centroid: pointsCentroid(pts),
   };
+}
+
+/**
+ * Sample every edge of a wire into a flat list of [x,y,z] points, skipping the
+ * first point of each subsequent edge to avoid duplicates at edge junctions.
+ * Mirrors the Python _sample_wire_3d.
+ */
+export function sampleWire3d(oc, wire, numPerEdge = EDGE_SAMPLES) {
+  const pts = [];
+  let started = false;
+  const exp = new oc.TopExp_Explorer_2(
+    wire,
+    oc.TopAbs_ShapeEnum.TopAbs_EDGE,
+    oc.TopAbs_ShapeEnum.TopAbs_SHAPE
+  );
+  while (exp.More()) {
+    const edge = oc.TopoDS.Edge_1(exp.Current());
+    try {
+      const curve = new oc.BRepAdaptor_Curve_2(edge);
+      const edgePts = sampleCurveAdaptor(curve, numPerEdge);
+      del(curve);
+      for (let i = started ? 1 : 0; i < edgePts.length; i++) pts.push(edgePts[i]);
+      if (edgePts.length) started = true;
+    } catch (e) {
+      /* skip an unsamplable edge */
+    }
+    exp.Next();
+  }
+  del(exp);
+  return pts;
+}
+
+/**
+ * Extract a face's inner (hole) loops from OCC wire topology: every wire that
+ * is not the outer wire, sampled into a point loop. Mirrors the Python
+ * breptools_OuterWire + TopExp(WIRE) walk; far more reliable than inferring
+ * holes from the triangulation. Returns [] when there are none.
+ */
+export function extractInnerLoops(oc, face) {
+  const loops = [];
+  let outerWire;
+  try {
+    outerWire = oc.BRepTools.OuterWire(face);
+  } catch (e) {
+    return loops;
+  }
+  const exp = new oc.TopExp_Explorer_2(
+    face,
+    oc.TopAbs_ShapeEnum.TopAbs_WIRE,
+    oc.TopAbs_ShapeEnum.TopAbs_SHAPE
+  );
+  while (exp.More()) {
+    const wire = oc.TopoDS.Wire_1(exp.Current());
+    const isOuter = outerWire && typeof wire.IsSame === "function"
+      ? wire.IsSame(outerWire)
+      : false;
+    if (!isOuter) {
+      const pts = sampleWire3d(oc, wire);
+      if (pts.length >= 3) loops.push(pts);
+    }
+    exp.Next();
+  }
+  del(exp);
+  return loops;
 }
 
 function mapShapes(oc, shape, shapeEnum) {

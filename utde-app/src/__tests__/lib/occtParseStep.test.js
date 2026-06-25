@@ -5,6 +5,8 @@ import {
   curveParams,
   tessellateFace,
   tessellateEdge,
+  sampleWire3d,
+  extractInnerLoops,
 } from "../../lib/occt/parseStep";
 
 // ── A faithful fake `oc` modeling the opencascade.js surface the parser uses ──
@@ -28,7 +30,8 @@ function makeOc(shape) {
       GeomAbs_BezierCurve: 3, GeomAbs_BSplineCurve: 4,
     },
     IFSelect_ReturnStatus: { IFSelect_RetDone: 1 },
-    TopAbs_ShapeEnum: { TopAbs_FACE: 4, TopAbs_EDGE: 6 },
+    TopAbs_ShapeEnum: { TopAbs_SHAPE: 0, TopAbs_FACE: 4, TopAbs_WIRE: 5, TopAbs_EDGE: 6 },
+    BRepTools: { OuterWire: (face) => face._outerWire },
     FS: { createDataFile: () => {}, unlink: () => {} },
     Message_ProgressRange_1: class {},
     STEPControl_Reader_1: class {
@@ -68,14 +71,61 @@ function makeOc(shape) {
       FindKey(i) { return this.items[i - 1]; }
       delete() {}
     },
-    TopoDS: { Face_1: (s) => s, Edge_1: (s) => s },
+    TopoDS: { Face_1: (s) => s, Edge_1: (s) => s, Wire_1: (s) => s },
   };
   oc.TopExp = {
     MapShapes_1: (s, shapeEnum, map) => {
       map._fill(shapeEnum === oc.TopAbs_ShapeEnum.TopAbs_FACE ? s._faces : s._edges);
     },
   };
+  // Explorer over WIRE (of a face) or EDGE (of a wire).
+  oc.TopExp_Explorer_2 = class {
+    constructor(shape, type) {
+      if (type === oc.TopAbs_ShapeEnum.TopAbs_WIRE) this.items = shape._wires || [];
+      else if (type === oc.TopAbs_ShapeEnum.TopAbs_EDGE) this.items = shape._edges || [];
+      else this.items = [];
+      this.i = 0;
+    }
+    More() { return this.i < this.items.length; }
+    Current() { return this.items[this.i]; }
+    Next() { this.i++; }
+    delete() {}
+  };
   return oc;
+}
+
+// A line segment edge a→b, param 0..1.
+function seg(a, b) {
+  return {
+    _ctype: 0, // GeomAbs_Line
+    _t0: 0,
+    _t1: 1,
+    _valueAt: (t) => P(
+      a[0] + (b[0] - a[0]) * t,
+      a[1] + (b[1] - a[1]) * t,
+      a[2] + (b[2] - a[2]) * t
+    ),
+    _line: { Location: () => P(...a), Direction: () => D(b[0] - a[0], b[1] - a[1], b[2] - a[2]) },
+  };
+}
+
+function makeWire(id, edges) {
+  return { _id: id, _edges: edges, IsSame(o) { return !!o && o._id === this._id; } };
+}
+
+// A quad face with a square hole (inner wire) from (1,1) to (2,2).
+function quadFaceWithHole() {
+  const f = quadFace();
+  const outer = makeWire(1, []); // outer wire — skipped, edges not needed
+  const inner = makeWire(2, [
+    seg([1, 1, 0], [2, 1, 0]),
+    seg([2, 1, 0], [2, 2, 0]),
+    seg([2, 2, 0], [1, 2, 0]),
+    seg([1, 2, 0], [1, 1, 0]),
+  ]);
+  f._wires = [outer, inner];
+  f._outerWire = outer;
+  return f;
 }
 
 // A unit quad in the z=0 plane, triangulated (1-based node ids).
@@ -182,6 +232,44 @@ describe("surfaceParams / curveParams branches", () => {
     expect(curveParams(oc, curve, "circle")).toEqual({
       center: [0, 0, 0], axis: [0, 0, 1], radius: 4,
     });
+  });
+});
+
+describe("inner-loop (hole) extraction", () => {
+  it("samples a wire's edges with de-duplicated junctions", () => {
+    const oc = makeOc({ _faces: [], _edges: [] });
+    const wire = makeWire(9, [seg([0, 0, 0], [10, 0, 0]), seg([10, 0, 0], [10, 10, 0])]);
+    const pts = sampleWire3d(oc, wire, 32);
+    // First edge keeps all 32 points; second skips its first → 63 total.
+    expect(pts).toHaveLength(63);
+    expect(pts[0]).toEqual([0, 0, 0]);
+    expect(pts[pts.length - 1]).toEqual([10, 10, 0]);
+  });
+
+  it("returns no loops for a face with no inner wires", () => {
+    const oc = makeOc({ _faces: [], _edges: [] });
+    expect(extractInnerLoops(oc, quadFace())).toEqual([]);
+  });
+
+  it("extracts the inner wire of a holed face, skipping the outer", () => {
+    const oc = makeOc({ _faces: [], _edges: [] });
+    const loops = extractInnerLoops(oc, quadFaceWithHole());
+    expect(loops).toHaveLength(1);
+    // 4 edges × 32, minus 3 shared junctions = 125 points.
+    expect(loops[0]).toHaveLength(125);
+  });
+
+  it("parseStepWithOc attaches inner_loops to a holed face", () => {
+    const oc = makeOc({ _faces: [quadFaceWithHole()], _edges: [] });
+    const { faces } = parseStepWithOc(oc, new Uint8Array([0]), 0.5);
+    expect(faces[0].inner_loops).toBeDefined();
+    expect(faces[0].inner_loops).toHaveLength(1);
+  });
+
+  it("omits inner_loops on a hole-free face", () => {
+    const oc = makeOc({ _faces: [quadFace()], _edges: [] });
+    const { faces } = parseStepWithOc(oc, new Uint8Array([0]), 0.5);
+    expect(faces[0].inner_loops).toBeUndefined();
   });
 });
 
