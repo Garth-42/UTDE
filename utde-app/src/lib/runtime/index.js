@@ -64,10 +64,12 @@ export const runtime = {
     return callPython("lint_script", { code });
   },
 
-  /** List process templates (array), excluding ones unavailable in-browser. */
+  /** List process templates (array), excluding ones unavailable in-browser.
+   *  `requires_local` templates shell out to external binaries (slicers) and
+   *  can't run in the static build, so they're hidden here. */
   async listTemplates() {
     const out = await callPython("list_templates", {});
-    return out.templates || [];
+    return (out.templates || []).filter((t) => !t.requires_local);
   },
 
   /** Enumerate bundled + session-imported machines (array of summaries). */

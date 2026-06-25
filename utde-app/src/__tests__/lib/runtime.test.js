@@ -50,6 +50,21 @@ describe("runtime.listTemplates", () => {
     const out = await runtime.listTemplates();
     expect(out).toEqual([{ id: "pocket" }]);
   });
+
+  it("hides requires_local (subprocess) templates", async () => {
+    callPython.mockResolvedValue({
+      templates: [
+        { id: "pocket", requires_local: false },
+        { id: "prusaslicer", requires_local: true },
+        { id: "raster_fill" },
+      ],
+    });
+    const out = await runtime.listTemplates();
+    const ids = out.map((t) => t.id);
+    expect(ids).toContain("pocket");
+    expect(ids).toContain("raster_fill");
+    expect(ids).not.toContain("prusaslicer");
+  });
 });
 
 describe("runtime.listMachines", () => {

@@ -145,6 +145,15 @@ class TestListTemplates:
         for tid in ("raster_fill", "follow_curve", "contour_parallel"):
             assert tid in ids
 
+    def test_requires_local_flag(self):
+        by_id = {t["id"]: t for t in webapi.list_templates()["templates"]}
+        # Subprocess-backed slicers are flagged so the static build can hide them.
+        assert by_id["prusaslicer"]["requires_local"] is True
+        assert by_id["libslic3r"]["requires_local"] is True
+        # Pure-Python primitives are not.
+        assert by_id["pocket"]["requires_local"] is False
+        assert by_id["raster_fill"]["requires_local"] is False
+
 
 # ── summarize_machine ────────────────────────────────────────────────────────
 

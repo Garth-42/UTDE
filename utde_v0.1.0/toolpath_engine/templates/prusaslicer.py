@@ -106,6 +106,7 @@ def _call_prusaslicer(model_path: str, params: dict) -> str:
     kind="add",
     label="PrusaSlicer",
     icon="add-layer",
+    requires_local=True,  # shells out to the PrusaSlicer CLI — server/desktop only
     requires=[{"type": "model", "label": "Model to slice", "count": 1}],
     params=[
         {"id": "layer_height",             "type": "number",  "default": 0.2,

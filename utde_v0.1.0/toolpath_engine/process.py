@@ -56,6 +56,7 @@ def process(
     params: Optional[List[Dict[str, Any]]] = None,
     est_time: Optional[float] = None,
     est_volume: Optional[float] = None,
+    requires_local: bool = False,
 ):
     """
     Decorator that registers a function as a named process template.
@@ -108,6 +109,10 @@ def process(
         fn.__process_params__      = params or []
         fn.__process_est_time__    = est_time
         fn.__process_est_volume__  = est_volume
+        # requires_local: the process shells out to an external binary (e.g. a
+        # slicer via subprocess) and so cannot run in the browser/Pyodide build.
+        # The static frontend hides these; a server build still offers them.
+        fn.__process_requires_local__ = bool(requires_local)
         _REGISTRY[name] = fn
         return fn
     return decorator
@@ -142,6 +147,7 @@ def list_processes() -> List[Dict[str, Any]]:
             "params":      fn.__process_params__,
             "est_time":    fn.__process_est_time__,
             "est_volume":  fn.__process_est_volume__,
+            "requires_local": getattr(fn, "__process_requires_local__", False),
         }
         for fn in _REGISTRY.values()
     ]
