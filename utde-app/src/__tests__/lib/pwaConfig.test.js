@@ -17,20 +17,28 @@ describe("PWA manifest", () => {
 });
 
 describe("PWA workbox config", () => {
-  it("precaches the WASM and wheel assets", () => {
-    expect(workbox.globPatterns.join(",")).toMatch(/wasm/);
-    expect(workbox.globPatterns.join(",")).toMatch(/whl/);
+  it("precaches the wheel but NOT the huge OCCT wasm", () => {
+    const globs = workbox.globPatterns.join(",");
+    expect(globs).toMatch(/whl/);
+    expect(globs).not.toMatch(/wasm/); // 50MB kernel is runtime-cached, not precached
     // The wheel + vendor chunks exceed Workbox's 2 MB default.
     expect(workbox.maximumFileSizeToCacheInBytes).toBeGreaterThan(2 * 1024 * 1024);
   });
 
-  it("runtime-caches the CDN WASM runtimes (Pyodide / opencascade.js)", () => {
+  it("runtime-caches the Pyodide CDN", () => {
     const rule = workbox.runtimeCaching.find((r) =>
       r.urlPattern.test("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js")
     );
     expect(rule).toBeTruthy();
     expect(rule.handler).toBe("CacheFirst");
-    expect(rule.urlPattern.test("https://cdn.jsdelivr.net/npm/opencascade.js/dist/x.wasm")).toBe(true);
+  });
+
+  it("runtime-caches the bundled OCCT wasm (same-origin)", () => {
+    const rule = workbox.runtimeCaching.find((r) =>
+      r.urlPattern.test("/assets/opencascade.full-abc123.wasm")
+    );
+    expect(rule).toBeTruthy();
+    expect(rule.handler).toBe("CacheFirst");
   });
 });
 

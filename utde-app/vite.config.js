@@ -12,9 +12,17 @@ export default defineConfig({
   // Deploy base path. Default "/" suits a domain root or RunPod proxy; set
   // VITE_BASE="/UTDE/" (repo name) when publishing to GitHub Pages project sites.
   base: process.env.VITE_BASE || "/",
-  // The app is fully static (no backend). The Pyodide worker and opencascade.js
-  // load from a CDN; nothing proxies to a server anymore. The /api proxy below
-  // is retained only as a dev convenience if a legacy server is run alongside.
+  // opencascade.js (OCCT WASM) is bundled here. Treat .wasm as an asset URL so
+  // its `import wasm from "*.wasm"` resolves to a URL string (Vite's default
+  // wasm handling would otherwise hand back an init function), and keep the
+  // huge kernel out of the dependency optimizer.
+  assetsInclude: ["**/*.wasm"],
+  optimizeDeps: {
+    exclude: ["opencascade.js"],
+  },
+  // The app is fully static (no backend). Pyodide loads from a CDN and
+  // opencascade.js is bundled; nothing proxies to a server. The /api proxy
+  // below is retained only as a dev convenience if a legacy server is run.
   server: {
     host: true,        // bind 0.0.0.0 so the devcontainer's port forward works
     port: 3000,

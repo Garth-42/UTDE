@@ -35,19 +35,33 @@ export const manifest = {
 };
 
 export const workbox = {
-  // Precache the built app, including the WASM/wheel assets we ship.
-  globPatterns: ["**/*.{js,css,html,svg,wasm,whl,json,ico}"],
-  // The toolpath_engine wheel + large vendor chunks exceed the 2 MB default.
-  maximumFileSizeToCacheInBytes: 80 * 1024 * 1024,
+  // Precache the built app + the small Python wheel. The large OCCT .wasm
+  // (~50 MB) is intentionally excluded from precache — it loads lazily on the
+  // first STEP import and is runtime-cached below, so the initial visit stays
+  // light while later visits work offline.
+  globPatterns: ["**/*.{js,css,html,svg,whl,json,ico}"],
+  // The toolpath_engine wheel + vendor chunks exceed the 2 MB default.
+  maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
   cleanupOutdatedCaches: true,
   runtimeCaching: [
     {
-      // Pyodide + opencascade.js (and their packages) load from jsdelivr.
+      // Pyodide + its packages load from jsdelivr.
       urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/.*/i,
       handler: "CacheFirst",
       options: {
-        cacheName: "utde-cdn-wasm",
+        cacheName: "utde-cdn",
         expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 30 },
+        cacheableResponse: { statuses: [0, 200] },
+      },
+    },
+    {
+      // The bundled opencascade.js kernel (same-origin .wasm) — cache after the
+      // first STEP import so subsequent loads are instant / offline.
+      urlPattern: /\.wasm$/i,
+      handler: "CacheFirst",
+      options: {
+        cacheName: "utde-wasm",
+        expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 30 },
         cacheableResponse: { statuses: [0, 200] },
       },
     },

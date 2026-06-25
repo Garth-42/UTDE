@@ -1,30 +1,29 @@
 /**
  * Lazy loader for the opencascade.js (OCCT WASM) runtime.
  *
- * The kernel is ~30 MB, so it is loaded only on first STEP import and cached.
- * Loaded from a CDN ESM build by default (consistent with how the Pyodide
- * worker loads Pyodide); the URL is overridable for self-hosting / offline
- * (Phase 4 PWA precaching).
+ * opencascade.js is bundled by Vite (its entry does `import wasm from
+ * "*.wasm"`, a bundler-only feature that cannot be loaded from a raw CDN). We
+ * dynamic-import it so Vite code-splits the ~50 MB kernel into its own chunk
+ * that only downloads on the first STEP import, and cache it thereafter.
+ *
+ * Requires vite.config to mark wasm files via assetsInclude so the .wasm
+ * import resolves to an asset URL, plus optimizeDeps.exclude for opencascade.js.
  *
  * Not unit-tested (requires the real WASM); the parser logic it feeds is tested
- * with a fake `oc` in parseStep.test.js.
+ * with a fake `oc` in occtParseStep.test.js.
  */
-
-const DEFAULT_OCCT_URL = "https://cdn.jsdelivr.net/npm/opencascade.js@2.0.0-beta/dist/opencascade.full.js";
 
 let _ocPromise = null;
 
 /**
  * Initialize (once) and return the OCCT handle.
- * @param {{url?: string, onProgress?: (stage: string) => void}} [opts]
+ * @param {{onProgress?: (stage: string) => void}} [opts]
  */
 export function initOcct(opts = {}) {
   if (_ocPromise) return _ocPromise;
-  const url = opts.url || DEFAULT_OCCT_URL;
   _ocPromise = (async () => {
     if (opts.onProgress) opts.onProgress("loading");
-    // opencascade.js default export is the module factory.
-    const mod = await import(/* @vite-ignore */ url);
+    const mod = await import("opencascade.js");
     const initOpenCascade = mod.default || mod.initOpenCascade || mod;
     if (opts.onProgress) opts.onProgress("instantiating");
     const oc = await initOpenCascade();
