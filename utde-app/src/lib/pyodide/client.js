@@ -96,12 +96,20 @@ export function createPyodideClient({ createWorker, pyodideIndexURL, wheelUrl } 
 // so importing this module never spins up Pyodide (and tests can import freely).
 let _singleton = null;
 
+// The wheel is served verbatim from public/ (not bundled/hashed) so its name
+// stays a valid PEP 427 wheel filename that micropip can parse.
+const WHEEL_NAME = "toolpath_engine-0.1.0-py3-none-any.whl";
+
 function defaultClient() {
   if (_singleton) return _singleton;
+  const wheelUrl = new URL(
+    `${import.meta.env.BASE_URL}wheels/${WHEEL_NAME}`,
+    self.location.origin
+  ).href;
   _singleton = createPyodideClient({
     createWorker: () =>
       new Worker(new URL("./worker.js", import.meta.url), { type: "module" }),
-    wheelUrl: new URL("./wheels/toolpath_engine-0.1.0-py3-none-any.whl", import.meta.url).href,
+    wheelUrl,
   });
   return _singleton;
 }

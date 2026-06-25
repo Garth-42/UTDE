@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Build the toolpath_engine wheel and place it where the Pyodide worker loads
-# it (src/lib/pyodide/wheels/). Pure-Python, so the wheel runs as-is in Pyodide.
+# Build the toolpath_engine wheel into public/wheels/ so Vite serves it verbatim
+# (NOT content-hashed) — micropip requires a valid PEP 427 wheel filename to
+# install it. Pure-Python, so the wheel runs as-is in Pyodide.
 #
 # Requires Python with `build` (pip install build). Run via `npm run build-wheel`.
 set -euo pipefail
@@ -8,7 +9,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "$HERE/.." && pwd)"
 REPO_ROOT="$(cd "$APP_DIR/.." && pwd)"
-WHEELS_DIR="$APP_DIR/src/lib/pyodide/wheels"
+WHEELS_DIR="$APP_DIR/public/wheels"
 
 PY="${PYTHON:-python3}"
 
