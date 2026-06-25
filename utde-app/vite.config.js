@@ -1,8 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
+import { pwaOptions } from "./src/lib/pwa/config";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Disabled under Vitest so the SW build doesn't run during unit tests.
+    VitePWA({ ...pwaOptions, disable: !!process.env.VITEST }),
+  ],
   // Deploy base path. Default "/" suits a domain root or RunPod proxy; set
   // VITE_BASE="/UTDE/" (repo name) when publishing to GitHub Pages project sites.
   base: process.env.VITE_BASE || "/",
