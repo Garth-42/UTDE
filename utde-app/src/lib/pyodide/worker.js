@@ -21,10 +21,10 @@ let pyodideReadyPromise = null;
 let dispatch = null;
 
 async function bootPyodide({ pyodideIndexURL, wheelUrl, packages }) {
-  // Pyodide is loaded from a CDN/bundled URL provided by the caller so this
-  // worker has no hard-coded version.
-  importScripts(`${pyodideIndexURL}pyodide.js`);
-  // eslint-disable-next-line no-undef
+  // This is a module worker (importScripts is disallowed), so load Pyodide via
+  // its ESM build with a dynamic import. The URL is a runtime value, so it's
+  // marked vite-ignore to stay an external runtime import.
+  const { loadPyodide } = await import(/* @vite-ignore */ `${pyodideIndexURL}pyodide.mjs`);
   const pyodide = await loadPyodide({ indexURL: pyodideIndexURL });
 
   postMessage({ type: "progress", stage: "packages" });
