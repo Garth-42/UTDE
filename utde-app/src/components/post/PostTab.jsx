@@ -124,6 +124,8 @@ export default function PostTab() {
   const gcode    = useToolpathStore((s) => s.gcode);
   const opRanges = useToolpathStore((s) => s.opRanges);
   const warnings = useToolpathStore((s) => s.warnings);
+  const selectedLine       = useToolpathStore((s) => s.selectedLine);
+  const toggleSelectedLine = useToolpathStore((s) => s.toggleSelectedLine);
   const setShowToolpaths = useUiStore((s) => s.setShowToolpaths);
   const fileName = useStepStore((s) => s.fileName);
 
@@ -198,10 +200,15 @@ export default function PostTab() {
         <div style={STYLES.body}>
           <div style={STYLES.card}>
             <div style={STYLES.cardHead}>G-code · {lineCount} lines</div>
-            <GcodeView gcode={gcode} opRanges={opRanges} />
+            <GcodeView
+              gcode={gcode}
+              opRanges={opRanges}
+              selectedLine={selectedLine}
+              onSelectLine={toggleSelectedLine}
+            />
           </div>
           <div style={STYLES.card}>
-            <div style={STYLES.cardHead}>Preview</div>
+            <div style={STYLES.cardHead}>Preview · click a G-code line to locate it</div>
             <div style={STYLES.viewport}>
               <StepViewport />
             </div>

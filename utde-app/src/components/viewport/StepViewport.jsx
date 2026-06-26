@@ -7,6 +7,7 @@ import { useUiStore } from "../../store/uiStore";
 import FaceMesh from "./FaceMesh";
 import EdgeLine from "./EdgeLine";
 import ToolpathLines from "./ToolpathLines";
+import ToolpathHighlight from "./ToolpathHighlight";
 import OriginIndicator from "./OriginIndicator";
 
 // Auto-fits camera whenever geometry changes
@@ -108,6 +109,7 @@ function SceneContent({ faces, edges, selectionMode, showBasePlate, showToolpath
       {workspaceOrigin && <WcsGizmo origin={workspaceOrigin} />}
 
       {showToolpaths && <ToolpathLines />}
+      {showToolpaths && <ToolpathHighlight />}
 
       <GizmoHelper alignment="bottom-left" margin={[60, 60]}>
         <GizmoViewport

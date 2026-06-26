@@ -34,9 +34,11 @@ const STYLES = {
     fontSize: 12,
     lineHeight: 1.45,
   },
-  row: (bg) => ({
+  row: (bg, selected) => ({
     display: "flex",
-    background: bg || "transparent",
+    background: selected ? "rgba(255, 204, 51, 0.22)" : bg || "transparent",
+    boxShadow: selected ? "inset 3px 0 0 #ffcc33" : "none",
+    cursor: "pointer",
   }),
   num: {
     flex: "0 0 48px",
@@ -48,7 +50,12 @@ const STYLES = {
   text: { flex: 1, whiteSpace: "pre", paddingRight: 16 },
 };
 
-export default function GcodeView({ gcode = "", opRanges = [] }) {
+export default function GcodeView({
+  gcode = "",
+  opRanges = [],
+  selectedLine = null,
+  onSelectLine,
+}) {
   const lines = useMemo(() => gcode.split("\n"), [gcode]);
 
   return (
@@ -56,9 +63,15 @@ export default function GcodeView({ gcode = "", opRanges = [] }) {
       {lines.map((line, i) => {
         const kind = kindForLine(i, opRanges);
         const bg = kind ? KIND_BG[kind] : null;
+        const selected = i === selectedLine;
         const spans = parseGcodeLine(line);
         return (
-          <div key={i} style={STYLES.row(bg)}>
+          <div
+            key={i}
+            style={STYLES.row(bg, selected)}
+            onClick={() => onSelectLine?.(i)}
+            aria-selected={selected}
+          >
             <span style={STYLES.num}>{i + 1}</span>
             <span style={STYLES.text}>
               {spans.length === 0 ? (

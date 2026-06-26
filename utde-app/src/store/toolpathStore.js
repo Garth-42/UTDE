@@ -16,6 +16,12 @@ export const useToolpathStore = create((set, get) => ({
   opRanges:     [],
   warnings:     [],
 
+  // Post tab: gcode line ↔ toolpath preview sync (null = nothing selected)
+  selectedLine: null,
+  setSelectedLine: (selectedLine) => set({ selectedLine }),
+  toggleSelectedLine: (line) =>
+    set((s) => ({ selectedLine: s.selectedLine === line ? null : line })),
+
   // Simulate playback
   simSpeed: 1,                       // 0.5 | 1 | 4 — multiplier on the per-tick step
   setSimSpeed: (simSpeed) => set({ simSpeed }),
@@ -33,6 +39,7 @@ export const useToolpathStore = create((set, get) => ({
         opRanges: opRanges || [],
         warnings: warnings || [],
         compileError: null,
+        selectedLine: null,   // clear any stale Post-tab selection
       };
     }),
 
@@ -59,7 +66,7 @@ export const useToolpathStore = create((set, get) => ({
       return { activeIds };
     }),
 
-  clearToolpaths: () => set({ toolpaths: [], activeIds: new Set() }),
+  clearToolpaths: () => set({ toolpaths: [], activeIds: new Set(), selectedLine: null }),
 
   setShowNormals: (v) => set({ showNormals: v }),
   setAnimProgress: (v) => set({ animProgress: v }),
