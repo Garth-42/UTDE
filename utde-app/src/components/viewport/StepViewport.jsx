@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Bounds, useBounds } from "@react-three/drei";
+import { OrbitControls, TransformControls, GizmoHelper, GizmoViewport, Grid, Bounds, useBounds } from "@react-three/drei";
 import * as THREE from "three";
 import { useStepStore } from "../../store/stepStore";
 import { useUiStore } from "../../store/uiStore";
@@ -57,6 +57,11 @@ function WcsGizmo({ origin }) {
 function SceneContent({ faces, edges, selectionMode, showBasePlate, showToolpaths }) {
   const deselectAll     = useStepStore((s) => s.deselectAll);
   const workspaceOrigin = useStepStore((s) => s.workspaceOrigin);
+  const transform       = useStepStore((s) => s.transform);
+  const gizmoMode       = useStepStore((s) => s.gizmoMode);
+  const setTransform    = useStepStore((s) => s.setTransform);
+  // Callback-ref into state so TransformControls can attach once the group mounts.
+  const [geomGroup, setGeomGroup] = useState(null);
   const showFaces = selectionMode !== "edges";
   const showEdges = selectionMode !== "faces";
   const gridRef = useRef();
@@ -97,13 +102,36 @@ function SceneContent({ faces, edges, selectionMode, showBasePlate, showToolpath
       {/* Permanent world-origin coordinate indicator */}
       <OriginIndicator size={30} />
 
-      <Bounds fit clip observe>
+      {/* `observe` is intentionally omitted so dragging the workpiece transform
+          doesn't continuously refit the camera; AutoFit refits on import. */}
+      <Bounds fit clip>
         <AutoFit faces={faces} />
-        <group onClick={(e) => { if (e.object.userData.kind == null) deselectAll(); }}>
+        <group
+          ref={setGeomGroup}
+          position={transform.translation}
+          quaternion={transform.quaternion}
+          onClick={(e) => { if (e.object.userData.kind == null) deselectAll(); }}
+        >
           {showFaces && faces.map((face) => <FaceMesh key={face.id} face={face} />)}
           {showEdges && edges.map((edge) => <EdgeLine key={edge.id} edge={edge} />)}
         </group>
       </Bounds>
+
+      {/* Workpiece move/rotate gizmo (Setup tab "Move" mode). Writes the dragged
+          pose straight back into the store so it stays the source of truth. */}
+      {gizmoMode !== "off" && geomGroup && (
+        <TransformControls
+          object={geomGroup}
+          mode={gizmoMode}
+          onObjectChange={() => {
+            const g = geomGroup;
+            setTransform({
+              translation: [g.position.x, g.position.y, g.position.z],
+              quaternion: [g.quaternion.x, g.quaternion.y, g.quaternion.z, g.quaternion.w],
+            });
+          }}
+        />
+      )}
 
       {/* WCS marker at user-picked workspace origin (separate from world origin) */}
       {workspaceOrigin && <WcsGizmo origin={workspaceOrigin} />}
