@@ -20,6 +20,37 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ["opencascade.js"],
   },
+  build: {
+    // three.js (the 3D viewport engine) is a legitimately large, rarely-changing
+    // vendor chunk (~195 kB gzipped) needed on load, so allow up to 800 kB before
+    // warning — after the manualChunks split below there's no actionable monolith.
+    chunkSizeWarningLimit: 800,
+    // Split heavy vendors into separate, long-term-cacheable chunks instead of
+    // one ~1.1 MB monolith. Order matters: match the react-* libs before the
+    // bare "react" bucket so their paths don't fall through to it.
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("/three") || id.includes("@react-three")) return "three";
+          if (id.includes("reactflow") || id.includes("@reactflow")) return "reactflow";
+          if (
+            id.includes("codemirror") ||
+            id.includes("@uiw") ||
+            id.includes("@lezer")
+          )
+            return "codemirror";
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("/scheduler/")
+          )
+            return "react";
+          return "vendor";
+        },
+      },
+    },
+  },
   // The app is fully static (no backend). Pyodide loads from a CDN and
   // opencascade.js is bundled; nothing proxies to a server. The /api proxy
   // below is retained only as a dev convenience if a legacy server is run.
