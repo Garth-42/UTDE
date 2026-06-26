@@ -11,6 +11,8 @@
  * can be unit-tested with a fake worker (no real Pyodide download).
  */
 
+import { useRuntimeStore } from "../../store/runtimeStore";
+
 const DEFAULT_PYODIDE_INDEX = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
 
 export function createPyodideClient({ createWorker, pyodideIndexURL, wheelUrl } = {}) {
@@ -115,10 +117,27 @@ function defaultClient() {
 }
 
 export function initPyodide(opts, onProgress) {
-  return defaultClient().initPyodide(opts, onProgress);
+  const store = useRuntimeStore.getState();
+  store.setEngine("pyodide", "loading", "starting");
+  return defaultClient()
+    .initPyodide(opts, (p) => {
+      store.setEngine("pyodide", "loading", p.stage);
+      if (onProgress) onProgress(p);
+    })
+    .then((r) => {
+      store.setEngine("pyodide", "ready");
+      return r;
+    })
+    .catch((err) => {
+      store.setError("pyodide", err.message || String(err));
+      throw err;
+    });
 }
 
 export function callPython(op, args) {
+  // Kick the status-reported init (idempotent) so the loading indicator shows
+  // even when a caller reaches callPython without an explicit initPyodide.
+  initPyodide();
   return defaultClient().callPython(op, args);
 }
 

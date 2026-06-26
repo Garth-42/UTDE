@@ -8,11 +8,23 @@
 import { setStepParser } from "../runtime/stepParser";
 import { initOcct } from "./loadOcct";
 import { parseStepWithOc } from "./parseStep";
+import { useRuntimeStore } from "../../store/runtimeStore";
 
 export function registerOcctParser(opts = {}) {
   setStepParser(async (bytes, deflection) => {
-    const oc = await initOcct(opts);
-    return parseStepWithOc(oc, bytes, deflection);
+    const store = useRuntimeStore.getState();
+    store.setEngine("occt", "loading", "starting");
+    try {
+      const oc = await initOcct({
+        ...opts,
+        onProgress: (stage) => store.setEngine("occt", "loading", stage),
+      });
+      store.setEngine("occt", "ready");
+      return parseStepWithOc(oc, bytes, deflection);
+    } catch (err) {
+      store.setError("occt", err.message || String(err));
+      throw err;
+    }
   });
 }
 
