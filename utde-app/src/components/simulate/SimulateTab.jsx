@@ -11,7 +11,7 @@
  *   - Status pill (bottom-right): playing / paused indicator
  */
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import I from "../icons";
 import StepViewport from "../viewport/StepViewport";
 import { useToolpathStore } from "../../store/toolpathStore";
@@ -22,7 +22,9 @@ import {
   scrubSegments,
   formatTime,
   totalDurationSeconds,
+  totalPointCount,
 } from "../../lib/simulation";
+import { buildPointToLineMap, cursorGlobalIndex } from "../../lib/gcodeSync";
 
 const STYLES = {
   shell: {
@@ -225,6 +227,8 @@ export default function SimulateTab() {
   const isAnimating  = useToolpathStore((s) => s.isAnimating);
   const simSpeed     = useToolpathStore((s) => s.simSpeed);
   const opRanges     = useToolpathStore((s) => s.opRanges);
+  const gcode        = useToolpathStore((s) => s.gcode);
+  const setSelectedLine  = useToolpathStore((s) => s.setSelectedLine);
   const setProgress      = useToolpathStore((s) => s.setAnimProgress);
   const startAnimation   = useToolpathStore((s) => s.startAnimation);
   const stopAnimation    = useToolpathStore((s) => s.stopAnimation);
@@ -246,6 +250,22 @@ export default function SimulateTab() {
   const cursor   = cursorPosition(toolpaths, animProgress);
   const activeTp = cursor.tpIdx >= 0 ? toolpaths[cursor.tpIdx] : null;
   const activePoint = activeTp?.points?.[cursor.pointIdx] || null;
+
+  // Reverse sync: the playback cursor → the current G-code line. Drives the
+  // shared `selectedLine` so the Post-tab listing highlights/scrolls to where
+  // playback is, and the current line shows in the HUD below.
+  const totalPts    = totalPointCount(toolpaths);
+  const pointToLine = useMemo(
+    () => buildPointToLineMap(gcode, opRanges, totalPts),
+    [gcode, opRanges, totalPts],
+  );
+  const globalIdx = cursorGlobalIndex(toolpaths, animProgress);
+  const currentLine =
+    globalIdx >= 0 && globalIdx < pointToLine.length ? pointToLine[globalIdx] : -1;
+
+  useEffect(() => {
+    if (currentLine >= 0) setSelectedLine(currentLine);
+  }, [currentLine, setSelectedLine]);
 
   function togglePlay() {
     if (isAnimating) stopAnimation();
@@ -305,6 +325,10 @@ export default function SimulateTab() {
                     {activePoint?.process_params?.spindle_rpm
                       ? `${Math.round(activePoint.process_params.spindle_rpm)} rpm`
                       : "—"}
+                  </span>
+                  <span style={STYLES.hudStatLabel}>G-code</span>
+                  <span style={STYLES.hudStatValue}>
+                    {currentLine >= 0 ? `line ${currentLine + 1}` : "—"}
                   </span>
                 </div>
               </>

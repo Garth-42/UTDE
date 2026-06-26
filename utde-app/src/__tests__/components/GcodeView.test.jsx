@@ -32,4 +32,16 @@ describe("GcodeView line selection", () => {
     const rows = container.querySelectorAll("[aria-selected]");
     expect(() => fireEvent.click(rows[0])).not.toThrow();
   });
+
+  it("scrolls the selected line into view (reverse sync)", () => {
+    const spy = vi.fn();
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = spy;
+    try {
+      render(<GcodeView gcode={GCODE} selectedLine={1} />);
+      expect(spy).toHaveBeenCalledWith({ block: "nearest" });
+    } finally {
+      Element.prototype.scrollIntoView = orig;
+    }
+  });
 });

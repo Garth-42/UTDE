@@ -9,6 +9,7 @@
  */
 
 import { parseGcodeLine } from "./gcodeParse";
+import { cursorPosition } from "./simulation";
 
 /** True when a G-code line carries an X/Y/Z coordinate (i.e. a motion line). */
 export function isMotionLine(line) {
@@ -39,6 +40,19 @@ export function buildLineToPointMap(gcode, opRanges) {
     }
   }
   return map;
+}
+
+/**
+ * Global point index for the simulation playback cursor at `progress` (0..1).
+ * Flattens the per-op cursor ({tpIdx, pointIdx}) into the global point order.
+ * @returns {number} global point index, or -1 when there are no points.
+ */
+export function cursorGlobalIndex(toolpaths, progress) {
+  const { tpIdx, pointIdx } = cursorPosition(toolpaths || [], progress);
+  if (tpIdx < 0) return -1;
+  let base = 0;
+  for (let i = 0; i < tpIdx; i++) base += toolpaths[i]?.points?.length || 0;
+  return base + pointIdx;
 }
 
 /**

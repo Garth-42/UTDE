@@ -7,7 +7,7 @@
  * blocks read green-soft and subtractive blocks read orange-soft.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { parseGcodeLine, kindForLine } from "../../lib/gcodeParse";
 
 const KIND_BG = {
@@ -57,6 +57,20 @@ export default function GcodeView({
   onSelectLine,
 }) {
   const lines = useMemo(() => gcode.split("\n"), [gcode]);
+  const selectedRef = useRef(null);
+
+  // Bring the selected line into view (drives the reverse sync: when playback
+  // or a click changes the selection, the listing scrolls to it).
+  useEffect(() => {
+    const el = selectedRef.current;
+    if (el && typeof el.scrollIntoView === "function") {
+      try {
+        el.scrollIntoView({ block: "nearest" });
+      } catch (e) {
+        /* jsdom / unsupported — ignore */
+      }
+    }
+  }, [selectedLine]);
 
   return (
     <div style={STYLES.shell}>
@@ -68,6 +82,7 @@ export default function GcodeView({
         return (
           <div
             key={i}
+            ref={selected ? selectedRef : null}
             style={STYLES.row(bg, selected)}
             onClick={() => onSelectLine?.(i)}
             aria-selected={selected}

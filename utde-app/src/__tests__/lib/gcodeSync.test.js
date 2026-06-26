@@ -3,7 +3,14 @@ import {
   isMotionLine,
   buildLineToPointMap,
   buildPointToLineMap,
+  cursorGlobalIndex,
 } from "../../lib/gcodeSync";
+
+const pt = (x = 0) => ({ x, y: 0, z: 0 });
+const TOOLPATHS = [
+  { points: [pt(0), pt(1)] }, // global 0,1
+  { points: [pt(2), pt(3)] }, // global 2,3
+];
 
 describe("isMotionLine", () => {
   it("is true for lines with X/Y/Z coordinates", () => {
@@ -64,5 +71,22 @@ describe("buildPointToLineMap", () => {
   it("inverts the mapping (point → first rendering line)", () => {
     const rev = buildPointToLineMap(GCODE, OP_RANGES, 4);
     expect(rev).toEqual([3, 4, 7, 8]);
+  });
+});
+
+describe("cursorGlobalIndex", () => {
+  it("returns the first point at progress 0 and the last at 1", () => {
+    expect(cursorGlobalIndex(TOOLPATHS, 0)).toBe(0);
+    expect(cursorGlobalIndex(TOOLPATHS, 1)).toBe(3);
+  });
+
+  it("returns -1 with no toolpaths", () => {
+    expect(cursorGlobalIndex([], 0.5)).toBe(-1);
+  });
+
+  it("composes with the reverse map to give the cursor's G-code line", () => {
+    const rev = buildPointToLineMap(GCODE, OP_RANGES, 4);
+    expect(rev[cursorGlobalIndex(TOOLPATHS, 1)]).toBe(8); // last point → line 8
+    expect(rev[cursorGlobalIndex(TOOLPATHS, 0)]).toBe(3); // first point → line 3
   });
 });
