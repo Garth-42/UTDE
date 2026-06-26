@@ -10,6 +10,11 @@ This is very much WIP, and in its current state not tested in any rigorous way a
 
 ## Run as a static web app (no server)
 
+**Hosted:** once deployed, the app is live at **https://garth-42.github.io/UTDE/app/**
+— just open the URL; anyone can use it, nothing to install. It's published by
+the `Deploy docs + app to GitHub Pages` workflow (docs at `/UTDE/`, app at
+`/UTDE/app/`). One-time repo setup: **Settings → Pages → Source → GitHub Actions**.
+
 UTDE can run **entirely in the browser** — no Python server, Docker, SSH, or
 tunnels. The toolpath engine runs via [Pyodide](https://pyodide.org) (CPython +
 numpy/scipy in WebAssembly) and STEP files are parsed via
