@@ -21,6 +21,7 @@ import { useUiStore } from "../../store/uiStore";
 import { useStepStore } from "../../store/stepStore";
 import { useTemplates } from "../../lib/templateLoader";
 import { totalDurationSeconds, formatTime } from "../../lib/simulation";
+import { useCursorLineSync } from "../../lib/useCursorLineSync";
 import { saveGcodeDialog, IS_TAURI } from "../../lib/backend";
 
 const STYLES = {
@@ -101,6 +102,32 @@ const STYLES = {
     alignItems: "center", justifyContent: "center",
     color: "var(--muted)", fontSize: 12, gap: 8,
   },
+
+  scrubBar: {
+    background: "var(--panel)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--r-lg)",
+    boxShadow: "var(--shadow-sm)",
+    padding: "8px 12px",
+    display: "flex", alignItems: "center", gap: 10,
+  },
+  scrubBtn: {
+    width: 30, height: 30,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    border: "1px solid var(--border)",
+    background: "var(--panel)",
+    color: "var(--ink-2)",
+    borderRadius: "var(--r-sm)",
+    cursor: "pointer",
+  },
+  scrubBtnPrimary: {
+    background: "var(--ink)", color: "var(--panel)", borderColor: "var(--ink)",
+  },
+  scrubRange: { flex: 1, cursor: "pointer", accentColor: "var(--ink)" },
+  scrubTime: {
+    fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--ink)",
+    minWidth: 92, textAlign: "right",
+  },
 };
 
 async function downloadGcode(gcode, defaultName = "output.nc") {
@@ -124,10 +151,23 @@ export default function PostTab() {
   const gcode    = useToolpathStore((s) => s.gcode);
   const opRanges = useToolpathStore((s) => s.opRanges);
   const warnings = useToolpathStore((s) => s.warnings);
+  const toolpaths          = useToolpathStore((s) => s.toolpaths);
+  const animProgress       = useToolpathStore((s) => s.animProgress);
+  const isAnimating        = useToolpathStore((s) => s.isAnimating);
+  const setAnimProgress    = useToolpathStore((s) => s.setAnimProgress);
+  const startAnimation     = useToolpathStore((s) => s.startAnimation);
+  const stopAnimation      = useToolpathStore((s) => s.stopAnimation);
+  const resetAnimation     = useToolpathStore((s) => s.resetAnimation);
+  const selectedLine       = useToolpathStore((s) => s.selectedLine);
+  const toggleSelectedLine = useToolpathStore((s) => s.toggleSelectedLine);
   const setShowToolpaths = useUiStore((s) => s.setShowToolpaths);
   const fileName = useStepStore((s) => s.fileName);
 
   const { templates } = useTemplates();
+
+  // Reverse sync: scrubbing/playing the preview highlights the matching G-code
+  // line (and the manual click→marker forward sync still works at rest).
+  useCursorLineSync();
 
   useEffect(() => {
     setShowToolpaths(true);
@@ -138,7 +178,8 @@ export default function PostTab() {
     [gcode],
   );
 
-  const cycleTotal = formatTime(1, totalDurationSeconds(opRanges, templates));
+  const totalSec = totalDurationSeconds(opRanges, templates);
+  const cycleTotal = formatTime(1, totalSec);
   const hasGcode = gcode && gcode.trim().length > 0;
 
   const defaultName = fileName
@@ -198,14 +239,53 @@ export default function PostTab() {
         <div style={STYLES.body}>
           <div style={STYLES.card}>
             <div style={STYLES.cardHead}>G-code · {lineCount} lines</div>
-            <GcodeView gcode={gcode} opRanges={opRanges} />
+            <GcodeView
+              gcode={gcode}
+              opRanges={opRanges}
+              selectedLine={selectedLine}
+              onSelectLine={toggleSelectedLine}
+            />
           </div>
           <div style={STYLES.card}>
-            <div style={STYLES.cardHead}>Preview</div>
+            <div style={STYLES.cardHead}>Preview · click a G-code line to locate it</div>
             <div style={STYLES.viewport}>
               <StepViewport />
             </div>
           </div>
+        </div>
+      )}
+
+      {hasGcode && toolpaths.length > 0 && (
+        <div style={STYLES.scrubBar}>
+          <button
+            style={STYLES.scrubBtn}
+            onClick={resetAnimation}
+            title="Rewind"
+          >
+            <I.rewind />
+          </button>
+          <button
+            style={{ ...STYLES.scrubBtn, ...STYLES.scrubBtnPrimary }}
+            onClick={() => (isAnimating ? stopAnimation() : startAnimation())}
+            title={isAnimating ? "Pause" : "Play"}
+          >
+            {isAnimating ? <I.pause /> : <I.play />}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.001}
+            value={animProgress}
+            onChange={(e) => setAnimProgress(parseFloat(e.target.value))}
+            style={STYLES.scrubRange}
+            aria-label="Scrub toolpath preview"
+          />
+          <span style={STYLES.scrubTime}>
+            {formatTime(animProgress, totalSec || 60)}
+            {" / "}
+            {formatTime(1, totalSec || 60)}
+          </span>
         </div>
       )}
     </div>

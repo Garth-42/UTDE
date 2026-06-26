@@ -23,6 +23,7 @@ import {
   formatTime,
   totalDurationSeconds,
 } from "../../lib/simulation";
+import { useCursorLineSync } from "../../lib/useCursorLineSync";
 
 const STYLES = {
   shell: {
@@ -247,6 +248,10 @@ export default function SimulateTab() {
   const activeTp = cursor.tpIdx >= 0 ? toolpaths[cursor.tpIdx] : null;
   const activePoint = activeTp?.points?.[cursor.pointIdx] || null;
 
+  // Reverse sync: the playback cursor → the current G-code line (shared hook,
+  // also used by the Post tab's scrubber).
+  const currentLine = useCursorLineSync();
+
   function togglePlay() {
     if (isAnimating) stopAnimation();
     else             startAnimation();
@@ -305,6 +310,10 @@ export default function SimulateTab() {
                     {activePoint?.process_params?.spindle_rpm
                       ? `${Math.round(activePoint.process_params.spindle_rpm)} rpm`
                       : "—"}
+                  </span>
+                  <span style={STYLES.hudStatLabel}>G-code</span>
+                  <span style={STYLES.hudStatValue}>
+                    {currentLine >= 0 ? `line ${currentLine + 1}` : "—"}
                   </span>
                 </div>
               </>

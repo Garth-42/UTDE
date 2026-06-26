@@ -112,6 +112,26 @@ describe("PostTab — populated", () => {
     expect(useUiStore.getState().showToolpaths).toBe(true);
   });
 
+  it("shows a scrubber when toolpaths exist and scrubbing sets progress", () => {
+    useToolpathStore.setState({
+      toolpaths: [
+        { id: 1, label: "op", color: "#fff", visible: true,
+          points: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }] },
+      ],
+      activeIds: new Set([1]),
+    });
+    render(<PostTab />);
+    const slider = screen.getByLabelText("Scrub toolpath preview");
+    expect(slider).toBeInTheDocument();
+    fireEvent.change(slider, { target: { value: "0.5" } });
+    expect(useToolpathStore.getState().animProgress).toBeCloseTo(0.5, 3);
+  });
+
+  it("hides the scrubber when there are no toolpaths", () => {
+    render(<PostTab />); // seeded with toolpaths: []
+    expect(screen.queryByLabelText("Scrub toolpath preview")).toBeNull();
+  });
+
   it("clicking Export creates a blob URL and triggers a download anchor", async () => {
     const clickSpy = vi.fn();
     let lastAnchor = null;

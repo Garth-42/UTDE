@@ -7,7 +7,7 @@
  * blocks read green-soft and subtractive blocks read orange-soft.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { parseGcodeLine, kindForLine } from "../../lib/gcodeParse";
 
 const KIND_BG = {
@@ -34,9 +34,11 @@ const STYLES = {
     fontSize: 12,
     lineHeight: 1.45,
   },
-  row: (bg) => ({
+  row: (bg, selected) => ({
     display: "flex",
-    background: bg || "transparent",
+    background: selected ? "rgba(255, 204, 51, 0.22)" : bg || "transparent",
+    boxShadow: selected ? "inset 3px 0 0 #ffcc33" : "none",
+    cursor: "pointer",
   }),
   num: {
     flex: "0 0 48px",
@@ -48,17 +50,67 @@ const STYLES = {
   text: { flex: 1, whiteSpace: "pre", paddingRight: 16 },
 };
 
-export default function GcodeView({ gcode = "", opRanges = [] }) {
+export default function GcodeView({
+  gcode = "",
+  opRanges = [],
+  selectedLine = null,
+  onSelectLine,
+}) {
   const lines = useMemo(() => gcode.split("\n"), [gcode]);
+  const selectedRef = useRef(null);
+
+  // Bring the selected line into view (drives the reverse sync: when playback
+  // or a click changes the selection, the listing scrolls to it).
+  useEffect(() => {
+    const el = selectedRef.current;
+    if (el && typeof el.scrollIntoView === "function") {
+      try {
+        el.scrollIntoView({ block: "nearest" });
+      } catch (e) {
+        /* jsdom / unsupported — ignore */
+      }
+    }
+  }, [selectedLine]);
+
+  // Arrow Up/Down (and Home/End) move the selection when the pane is focused.
+  function handleKeyDown(e) {
+    const n = lines.length;
+    if (n === 0) return;
+    const cur = selectedLine;
+    let target;
+    switch (e.key) {
+      case "ArrowDown": target = cur == null ? 0 : Math.min(n - 1, cur + 1); break;
+      case "ArrowUp":   target = cur == null ? n - 1 : Math.max(0, cur - 1); break;
+      case "Home":      target = 0; break;
+      case "End":       target = n - 1; break;
+      default: return;
+    }
+    e.preventDefault();
+    if (target !== cur) onSelectLine?.(target);
+  }
 
   return (
-    <div style={STYLES.shell}>
+    <div
+      style={STYLES.shell}
+      tabIndex={0}
+      role="listbox"
+      aria-label="G-code"
+      onKeyDown={handleKeyDown}
+    >
       {lines.map((line, i) => {
         const kind = kindForLine(i, opRanges);
         const bg = kind ? KIND_BG[kind] : null;
+        const selected = i === selectedLine;
         const spans = parseGcodeLine(line);
         return (
-          <div key={i} style={STYLES.row(bg)}>
+          <div
+            key={i}
+            ref={selected ? selectedRef : null}
+            style={STYLES.row(bg, selected)}
+            onClick={() => onSelectLine?.(i)}
+            role="option"
+            aria-selected={selected}
+          >
             <span style={STYLES.num}>{i + 1}</span>
             <span style={STYLES.text}>
               {spans.length === 0 ? (
