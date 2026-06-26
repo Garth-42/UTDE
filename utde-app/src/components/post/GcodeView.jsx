@@ -72,8 +72,31 @@ export default function GcodeView({
     }
   }, [selectedLine]);
 
+  // Arrow Up/Down (and Home/End) move the selection when the pane is focused.
+  function handleKeyDown(e) {
+    const n = lines.length;
+    if (n === 0) return;
+    const cur = selectedLine;
+    let target;
+    switch (e.key) {
+      case "ArrowDown": target = cur == null ? 0 : Math.min(n - 1, cur + 1); break;
+      case "ArrowUp":   target = cur == null ? n - 1 : Math.max(0, cur - 1); break;
+      case "Home":      target = 0; break;
+      case "End":       target = n - 1; break;
+      default: return;
+    }
+    e.preventDefault();
+    if (target !== cur) onSelectLine?.(target);
+  }
+
   return (
-    <div style={STYLES.shell}>
+    <div
+      style={STYLES.shell}
+      tabIndex={0}
+      role="listbox"
+      aria-label="G-code"
+      onKeyDown={handleKeyDown}
+    >
       {lines.map((line, i) => {
         const kind = kindForLine(i, opRanges);
         const bg = kind ? KIND_BG[kind] : null;
@@ -85,6 +108,7 @@ export default function GcodeView({
             ref={selected ? selectedRef : null}
             style={STYLES.row(bg, selected)}
             onClick={() => onSelectLine?.(i)}
+            role="option"
             aria-selected={selected}
           >
             <span style={STYLES.num}>{i + 1}</span>

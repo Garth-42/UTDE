@@ -1,15 +1,18 @@
 import { useMemo } from "react";
 import { useToolpathStore } from "../../store/toolpathStore";
+import { useUiStore } from "../../store/uiStore";
 import { buildLineToPointMap } from "../../lib/gcodeSync";
 
 /**
- * Highlights the toolpath point that corresponds to the G-code line selected
- * in the Post tab's GcodeView (a glowing marker + soft halo). Renders nothing
- * when no line is selected or the selected line isn't a motion line.
+ * Highlights the toolpath point for the G-code line selected in the Post tab's
+ * GcodeView (a glowing marker + halo). Scoped to the Post tab so it disappears
+ * when you switch away, and drawn on top of the geometry (depthTest off) so it
+ * is never hidden inside a solid part.
  */
 const HIGHLIGHT_COLOR = "#ffcc33";
 
 export default function ToolpathHighlight() {
+  const tab = useUiStore((s) => s.tab);
   const toolpaths = useToolpathStore((s) => s.toolpaths);
   const gcode = useToolpathStore((s) => s.gcode);
   const opRanges = useToolpathStore((s) => s.opRanges);
@@ -25,6 +28,8 @@ export default function ToolpathHighlight() {
     [gcode, opRanges]
   );
 
+  // The "locate" marker is a Post-tab affordance only.
+  if (tab !== "post") return null;
   if (selectedLine == null) return null;
   const idx = lineToPoint[selectedLine];
   if (idx == null || idx < 0 || idx >= flatPoints.length) return null;
@@ -33,13 +38,24 @@ export default function ToolpathHighlight() {
 
   return (
     <group position={[p.x, p.y, p.z]}>
-      <mesh>
+      <mesh renderOrder={999}>
         <sphereGeometry args={[3.2, 16, 16]} />
-        <meshBasicMaterial color={HIGHLIGHT_COLOR} />
+        <meshBasicMaterial
+          color={HIGHLIGHT_COLOR}
+          depthTest={false}
+          depthWrite={false}
+          transparent
+        />
       </mesh>
-      <mesh>
+      <mesh renderOrder={998}>
         <sphereGeometry args={[5.4, 16, 16]} />
-        <meshBasicMaterial color={HIGHLIGHT_COLOR} transparent opacity={0.18} />
+        <meshBasicMaterial
+          color={HIGHLIGHT_COLOR}
+          depthTest={false}
+          depthWrite={false}
+          transparent
+          opacity={0.22}
+        />
       </mesh>
     </group>
   );
