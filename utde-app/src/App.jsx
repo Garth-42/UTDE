@@ -12,6 +12,7 @@ import SimulateTab from "./components/simulate/SimulateTab";
 import PostTab from "./components/post/PostTab";
 import SplashScreen from "./components/SplashScreen";
 import ScriptOverlay from "./components/ScriptOverlay";
+import RuntimeStatus from "./components/RuntimeStatus";
 
 const ROOT = {
   width: "100%",
@@ -78,6 +79,7 @@ export default function App() {
       </div>
       <StatusBar />
       <ScriptOverlay />
+      <RuntimeStatus />
     </div>
   );
 }

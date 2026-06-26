@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { previewActiveOp } from "../../lib/timelineCompiler";
+import runtime from "../../lib/runtime";
 import { useOpsStore } from "../../store/opsStore";
 import { useStepStore } from "../../store/stepStore";
 import { useToolpathStore } from "../../store/toolpathStore";
 import { useUiStore } from "../../store/uiStore";
+
+// The timeline compiler now runs in-browser via the runtime, not over fetch.
+vi.mock("../../lib/runtime", () => ({
+  default: { compileTimeline: vi.fn() },
+}));
 
 const POCKET = {
   id: "pocket", label: "Pocket", kind: "sub", icon: "pocket",
@@ -24,18 +30,16 @@ const lastFetchBody = {};
 
 beforeEach(() => {
   Object.keys(lastFetchBody).forEach((k) => delete lastFetchBody[k]);
-  global.fetch = vi.fn(async (_url, init) => {
-    Object.assign(lastFetchBody, JSON.parse(init.body));
+  runtime.compileTimeline.mockReset();
+  runtime.compileTimeline.mockImplementation(async (body) => {
+    Object.assign(lastFetchBody, body);
     return {
-      ok: true,
-      json: async () => ({
-        points: [],
-        op_ranges: [{ idx: 0, uid: "op_x", name: "Pocket", templateId: "pocket",
-                      kind: "sub", point_start: 0, point_end: 0,
-                      gcode_start_line: 0, gcode_end_line: 0 }],
-        gcode: "",
-        warnings: [],
-      }),
+      points: [],
+      op_ranges: [{ idx: 0, uid: "op_x", name: "Pocket", templateId: "pocket",
+                    kind: "sub", point_start: 0, point_end: 0,
+                    gcode_start_line: 0, gcode_end_line: 0 }],
+      gcode: "",
+      warnings: [],
     };
   });
 

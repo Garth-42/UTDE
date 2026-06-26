@@ -99,6 +99,7 @@ def _call_libslic3r(model_path: str, params: dict) -> str:
     kind="add",
     label="LibSlic3r",
     icon="add-layer",
+    requires_local=True,  # shells out to the LibSlic3r CLI — server/desktop only
     requires=[{"type": "model", "label": "Model to slice", "count": 1}],
     params=[
         {"id": "layer_height",              "type": "number",  "default": 0.2,

@@ -7,7 +7,7 @@
  * stashes the G-code and warnings for the Post tab.
  */
 
-import { getBaseUrl } from "./backend";
+import runtime from "./runtime";
 import { useOpsStore } from "../store/opsStore";
 import { useStepStore } from "../store/stepStore";
 import { useToolpathStore } from "../store/toolpathStore";
@@ -43,15 +43,9 @@ export async function compileTimeline({ entriesOverride } = {}) {
 
   let result;
   try {
-    const base = await getBaseUrl();
-    const res  = await fetch(`${base}/compile-timeline`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(body),
-    });
-    result = await res.json();
-    if (!res.ok) {
-      throw new Error(result.error || `compile-timeline returned ${res.status}`);
+    result = await runtime.compileTimeline(body);
+    if (result && result.error) {
+      throw new Error(result.error);
     }
   } catch (err) {
     if (tStore.setCompiling)    tStore.setCompiling(false);

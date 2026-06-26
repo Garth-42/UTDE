@@ -8,6 +8,41 @@ For Docs: https://garth-42.github.io/UTDE/
 
 This is very much WIP, and in its current state not tested in any rigorous way and is very much just me playing around with Claude.
 
+## Run as a static web app (no server)
+
+**Hosted:** once deployed, the app is live at **https://garth-42.github.io/UTDE/app/**
+— just open the URL; anyone can use it, nothing to install. It's published by
+the `Deploy docs + app to GitHub Pages` workflow (docs at `/UTDE/`, app at
+`/UTDE/app/`). One-time repo setup: **Settings → Pages → Source → GitHub Actions**.
+
+UTDE can run **entirely in the browser** — no Python server, Docker, SSH, or
+tunnels. The toolpath engine runs via [Pyodide](https://pyodide.org) (CPython +
+numpy/scipy in WebAssembly) and STEP files are parsed via
+[opencascade.js](https://ocjs.org) (the OpenCASCADE CAD kernel in WASM). The
+build is a plain static bundle you can host anywhere (GitHub Pages, Netlify, S3,
+or any static file server).
+
+```bash
+cd utde-app
+npm ci
+npm run build           # prebuild syncs machines/ and builds the Python wheel
+npx serve dist          # or any static host → open the printed URL
+```
+
+The first load downloads the WASM runtimes (~tens of MB, cached afterwards;
+made a one-time cost by the PWA service worker). Generation, timeline
+compilation, linting, machine handling and script execution all run client-side
+through the same `toolpath_engine.webapi` core the server uses.
+
+**Notes**
+
+- **Subdirectory hosting** (e.g. GitHub Pages project sites): build with
+  `VITE_BASE="/UTDE/" npm run build`.
+- **Slicer templates** (`prusaslicer`, `libslic3r`) shell out to external
+  binaries and are hidden in the static build (they need a local/server runtime).
+- Requires Python with `build` (`pip install build`) at build time to produce
+  the `toolpath_engine` wheel — not at runtime.
+
 ## Run with Docker
 
 The repo ships a self-contained image that bundles the Python/pythonocc backend

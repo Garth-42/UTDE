@@ -7,21 +7,16 @@
  */
 
 import { useEffect } from "react";
-import { getBaseUrl } from "./backend";
+import runtime from "./runtime";
 import { useMachineStore } from "../store/machineStore";
 
 export async function fetchMachines() {
   const store = useMachineStore.getState();
   store.setLoading(true);
   try {
-    const base = await getBaseUrl();
-    const res  = await fetch(`${base}/machines`);
-    const body = await res.json();
-    if (!res.ok) {
-      throw new Error(body.error || `/machines returned ${res.status}`);
-    }
-    store.setAvailable(body.machines || []);
-    return body.machines || [];
+    const machines = await runtime.listMachines();
+    store.setAvailable(machines || []);
+    return machines || [];
   } catch (err) {
     store.setError(err.message || String(err));
     throw err;
@@ -34,19 +29,11 @@ export async function importMachine(file) {
   const store = useMachineStore.getState();
   store.setLoading(true);
   try {
-    const base = await getBaseUrl();
-    const form = new FormData();
-    form.append("file", file);
-    const res  = await fetch(`${base}/machines/import`, {
-      method: "POST",
-      body:   form,
-    });
-    const body = await res.json();
-    if (!res.ok) {
-      throw new Error(body.error || `/machines/import returned ${res.status}`);
-    }
-    if (body.machine) store.appendMachine(body.machine);
-    return body.machine;
+    const text = typeof file === "string" ? file : await file.text();
+    const filename = (file && file.name) || "machine.yaml";
+    const machine = await runtime.importMachine(text, filename);
+    if (machine) store.appendMachine(machine);
+    return machine;
   } catch (err) {
     store.setError(err.message || String(err));
     throw err;

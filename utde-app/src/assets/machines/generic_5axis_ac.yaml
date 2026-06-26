@@ -1,0 +1,57 @@
+# Generic 5-Axis Head-Table Machine — AC Configuration
+# ======================================================
+# Tool-side: X, Y, Z linear axes (gantry/spindle head)
+# Workpiece-side: A (tilt) + C (rotation) rotary table
+#
+# Load with:
+#   from toolpath_engine import Machine
+#   with open("machines/generic_5axis_ac.yaml") as f:
+#       machine = Machine.from_yaml(f.read())
+
+name: generic_5axis_ac
+
+tool_chain:
+  - name: X
+    type: linear
+    axis: [1, 0, 0]
+    limits: [0, 600]
+    home: 0
+  - name: Y
+    type: linear
+    axis: [0, 1, 0]
+    limits: [0, 500]
+    home: 0
+  - name: Z
+    type: linear
+    axis: [0, 0, 1]
+    limits: [0, 400]
+    home: 400
+
+workpiece_chain:
+  - name: A
+    type: rotary
+    axis: [1, 0, 0]
+    limits: [-120, 120]
+    home: 0
+  - name: C
+    type: rotary
+    axis: [0, 0, 1]
+    # no limits key = continuous rotation
+    home: 0
+
+# Distance from last tool-chain joint to tool tip (mm)
+tool_offset: [0, 0, 80]
+
+config:
+  post: fanuc
+  wcs_register: G54
+  axis_names:
+    X: X
+    Y: Y
+    Z: Z
+    A: A
+    C: C
+  # Post-processor G-code dialect: fanuc | siemens | haas | marlin | klipper
+  dialect: fanuc
+  # Rotary output: degrees
+  rotary_units: degrees
