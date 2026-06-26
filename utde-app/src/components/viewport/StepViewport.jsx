@@ -60,6 +60,7 @@ function SceneContent({ faces, edges, selectionMode, showBasePlate, showToolpath
   const transform       = useStepStore((s) => s.transform);
   const gizmoMode       = useStepStore((s) => s.gizmoMode);
   const setTransform    = useStepStore((s) => s.setTransform);
+  const measurement     = useStepStore((s) => s.measurement);
   // Callback-ref into state so TransformControls can attach once the group mounts.
   const [geomGroup, setGeomGroup] = useState(null);
   const showFaces = selectionMode !== "edges";
@@ -136,6 +137,16 @@ function SceneContent({ faces, edges, selectionMode, showBasePlate, showToolpath
       {/* WCS marker at user-picked workspace origin (separate from world origin) */}
       {workspaceOrigin && <WcsGizmo origin={workspaceOrigin} />}
 
+      {/* Measure marker — drawn on top so it isn't hidden inside the part */}
+      {measurement && (
+        <group position={measurement.point}>
+          <mesh renderOrder={999}>
+            <sphereGeometry args={[2.4, 16, 16]} />
+            <meshBasicMaterial color="#22d3ee" depthTest={false} depthWrite={false} transparent />
+          </mesh>
+        </group>
+      )}
+
       {showToolpaths && <ToolpathLines />}
       {showToolpaths && <ToolpathHighlight />}
 
@@ -174,6 +185,8 @@ export default function StepViewport() {
   const pickingZOrigin    = useStepStore((s) => s.pickingZOrigin);
   const cancelPickOrigin  = useStepStore((s) => s.cancelPickOrigin);
   const cancelPickZOrigin = useStepStore((s) => s.cancelPickZOrigin);
+  const measuring         = useStepStore((s) => s.measuring);
+  const stopMeasure       = useStepStore((s) => s.stopMeasure);
   const selectionMode     = useUiStore((s) => s.selectionMode);
   const showBasePlate     = useUiStore((s) => s.showBasePlate);
   const showToolpaths     = useUiStore((s) => s.showToolpaths);
@@ -181,7 +194,7 @@ export default function StepViewport() {
   const viewportBg         = theme === "dark" ? "#2a2a2a" : "#e8e8f2";
 
   const hasGeometry = faces.length > 0 || edges.length > 0;
-  const inPickMode  = pickingOrigin || pickingZOrigin;
+  const inPickMode  = pickingOrigin || pickingZOrigin || measuring;
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -215,6 +228,16 @@ export default function StepViewport() {
           Click a face or edge point to set Z origin — Esc to cancel
         </div>
       )}
+      {measuring && (
+        <div style={{
+          position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
+          background: "rgba(34,211,238,0.10)", border: "1px solid #22d3ee66", borderRadius: 6,
+          color: "#0e7490", fontSize: 11, padding: "5px 12px", zIndex: 10,
+          pointerEvents: "none",
+        }}>
+          Click an edge or face point to read its location — Esc to stop
+        </div>
+      )}
       <Canvas
         camera={{ fov: 50, near: 0.1, far: 100000, position: [0, -300, 200] }}
         style={{ background: viewportBg, cursor: inPickMode ? "crosshair" : "default" }}
@@ -223,6 +246,7 @@ export default function StepViewport() {
           if (e.key === "Escape") {
             if (pickingOrigin) cancelPickOrigin();
             if (pickingZOrigin) cancelPickZOrigin();
+            if (measuring) stopMeasure();
           }
         }}
         tabIndex={0}

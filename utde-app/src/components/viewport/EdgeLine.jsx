@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import { useStepStore } from "../../store/stepStore";
+import { transformPoint } from "../../lib/geomTransform";
 
 const EDGE_COLORS = {
   line:     "#88bbff",
@@ -22,6 +23,9 @@ export default function EdgeLine({ edge }) {
   const pickingZOrigin     = useStepStore((s) => s.pickingZOrigin);
   const setWorkspaceOrigin = useStepStore((s) => s.setWorkspaceOrigin);
   const setZOrigin         = useStepStore((s) => s.setZOrigin);
+  const measuring          = useStepStore((s) => s.measuring);
+  const setMeasurement     = useStepStore((s) => s.setMeasurement);
+  const transform          = useStepStore((s) => s.transform);
 
   const isSelected = selectedEdgeIds.has(edge.id);
   const isHovered  = hoveredEdgeId === edge.id;
@@ -40,7 +44,16 @@ export default function EdgeLine({ edge }) {
 
   const handleClick = (e) => {
     e.stopPropagation();
-    if (pickingZOrigin) {
+    if (measuring) {
+      const p = edge.params || {};
+      const summary = { type: edge.type };
+      if (p.start) summary.start = transformPoint(transform, p.start);
+      if (p.end) summary.end = transformPoint(transform, p.end);
+      if (p.center) summary.center = transformPoint(transform, p.center);
+      if (p.radius != null) summary.radius = p.radius;
+      if (p.length != null) summary.length = p.length;
+      setMeasurement([e.point.x, e.point.y, e.point.z], { kind: "edge", id: edge.id, summary });
+    } else if (pickingZOrigin) {
       setZOrigin(e.point.z);
     } else if (pickingOrigin) {
       setWorkspaceOrigin({ x: e.point.x, y: e.point.y, z: e.point.z });

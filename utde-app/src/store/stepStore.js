@@ -58,6 +58,10 @@ export const useStepStore = create((set, get) => ({
   transform: IDENTITY_TRANSFORM,   // { translation:[x,y,z], quaternion:[x,y,z,w] }
   gizmoMode: "off",                // "off" | "translate" | "rotate"
 
+  // Measure tool (find the XYZ location of an edge/point)
+  measuring: false,
+  measurement: null,               // { point:[x,y,z], kind, id, summary } | null
+
   // UI state
   isLoading: false,
   error: null,
@@ -71,6 +75,8 @@ export const useStepStore = create((set, get) => ({
       selectedVertexIds: new Set(),
       transform: IDENTITY_TRANSFORM,   // fresh part → identity pose
       gizmoMode: "off",
+      measuring: false,
+      measurement: null,
       error: null,
     }),
 
@@ -244,4 +250,13 @@ export const useStepStore = create((set, get) => ({
     const { faces, edges, transform } = get();
     return applyTransformToGeometry(faces, edges, transform);
   },
+
+  // ── Measure tool ────────────────────────────────────────────────────────────
+  startMeasure: () => set({ measuring: true }),
+  stopMeasure: () => set({ measuring: false }),
+  clearMeasurement: () => set({ measurement: null }),
+  /** Record a measured location. `point` is world XYZ from the raycaster;
+   *  `meta` carries { kind, id, summary } for the readout. Stays in measuring
+   *  mode so consecutive picks work. */
+  setMeasurement: (point, meta = {}) => set({ measurement: { point, ...meta } }),
 }));
