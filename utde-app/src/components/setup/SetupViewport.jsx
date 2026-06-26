@@ -25,6 +25,8 @@
 import { useEffect, useMemo } from "react";
 import I from "../icons";
 import StepViewport from "../viewport/StepViewport";
+import WorkpiecePanel from "./WorkpiecePanel";
+import MeasurePanel from "./MeasurePanel";
 import { useOpsStore } from "../../store/opsStore";
 import { useUiStore } from "../../store/uiStore";
 import { useStepStore } from "../../store/stepStore";
@@ -228,6 +230,12 @@ export default function SetupViewport() {
   return (
     <div style={STYLES.shell}>
       <StepViewport />
+
+      {/* Re-orient / translate the imported workpiece */}
+      <WorkpiecePanel />
+
+      {/* Read the XYZ location of an edge/point */}
+      <MeasurePanel />
 
       {/* Selection-filter chip */}
       <div style={{ ...STYLES.overlay, ...STYLES.filterChip }}>

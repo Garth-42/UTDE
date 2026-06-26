@@ -23,6 +23,8 @@ export default function FaceMesh({ face }) {
   const setHovered      = useStepStore((s) => s.setHovered);
   const pickingZOrigin  = useStepStore((s) => s.pickingZOrigin);
   const setZOrigin      = useStepStore((s) => s.setZOrigin);
+  const measuring       = useStepStore((s) => s.measuring);
+  const setMeasurement  = useStepStore((s) => s.setMeasurement);
 
   const isSelected = selectedFaceIds.has(face.id);
   const isHovered  = hoveredFaceId === face.id;
@@ -42,7 +44,11 @@ export default function FaceMesh({ face }) {
 
   const handleClick = (e) => {
     e.stopPropagation();
-    if (pickingZOrigin) {
+    if (measuring) {
+      setMeasurement([e.point.x, e.point.y, e.point.z], {
+        kind: "face", id: face.id, summary: { type: face.type },
+      });
+    } else if (pickingZOrigin) {
       setZOrigin(e.point.z);
     } else {
       toggleFace(face.id, e.shiftKey || e.ctrlKey || e.metaKey);

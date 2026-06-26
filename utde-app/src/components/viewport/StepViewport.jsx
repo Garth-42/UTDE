@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Bounds, useBounds } from "@react-three/drei";
+import { OrbitControls, TransformControls, GizmoHelper, GizmoViewport, Grid, Bounds, useBounds } from "@react-three/drei";
 import * as THREE from "three";
 import { useStepStore } from "../../store/stepStore";
 import { useUiStore } from "../../store/uiStore";
@@ -57,6 +57,12 @@ function WcsGizmo({ origin }) {
 function SceneContent({ faces, edges, selectionMode, showBasePlate, showToolpaths }) {
   const deselectAll     = useStepStore((s) => s.deselectAll);
   const workspaceOrigin = useStepStore((s) => s.workspaceOrigin);
+  const transform       = useStepStore((s) => s.transform);
+  const gizmoMode       = useStepStore((s) => s.gizmoMode);
+  const setTransform    = useStepStore((s) => s.setTransform);
+  const measurement     = useStepStore((s) => s.measurement);
+  // Callback-ref into state so TransformControls can attach once the group mounts.
+  const [geomGroup, setGeomGroup] = useState(null);
   const showFaces = selectionMode !== "edges";
   const showEdges = selectionMode !== "faces";
   const gridRef = useRef();
@@ -97,16 +103,49 @@ function SceneContent({ faces, edges, selectionMode, showBasePlate, showToolpath
       {/* Permanent world-origin coordinate indicator */}
       <OriginIndicator size={30} />
 
-      <Bounds fit clip observe>
+      {/* `observe` is intentionally omitted so dragging the workpiece transform
+          doesn't continuously refit the camera; AutoFit refits on import. */}
+      <Bounds fit clip>
         <AutoFit faces={faces} />
-        <group onClick={(e) => { if (e.object.userData.kind == null) deselectAll(); }}>
+        <group
+          ref={setGeomGroup}
+          position={transform.translation}
+          quaternion={transform.quaternion}
+          onClick={(e) => { if (e.object.userData.kind == null) deselectAll(); }}
+        >
           {showFaces && faces.map((face) => <FaceMesh key={face.id} face={face} />)}
           {showEdges && edges.map((edge) => <EdgeLine key={edge.id} edge={edge} />)}
         </group>
       </Bounds>
 
+      {/* Workpiece move/rotate gizmo (Setup tab "Move" mode). Writes the dragged
+          pose straight back into the store so it stays the source of truth. */}
+      {gizmoMode !== "off" && geomGroup && (
+        <TransformControls
+          object={geomGroup}
+          mode={gizmoMode}
+          onObjectChange={() => {
+            const g = geomGroup;
+            setTransform({
+              translation: [g.position.x, g.position.y, g.position.z],
+              quaternion: [g.quaternion.x, g.quaternion.y, g.quaternion.z, g.quaternion.w],
+            });
+          }}
+        />
+      )}
+
       {/* WCS marker at user-picked workspace origin (separate from world origin) */}
       {workspaceOrigin && <WcsGizmo origin={workspaceOrigin} />}
+
+      {/* Measure marker — drawn on top so it isn't hidden inside the part */}
+      {measurement && (
+        <group position={measurement.point}>
+          <mesh renderOrder={999}>
+            <sphereGeometry args={[2.4, 16, 16]} />
+            <meshBasicMaterial color="#22d3ee" depthTest={false} depthWrite={false} transparent />
+          </mesh>
+        </group>
+      )}
 
       {showToolpaths && <ToolpathLines />}
       {showToolpaths && <ToolpathHighlight />}
@@ -146,6 +185,8 @@ export default function StepViewport() {
   const pickingZOrigin    = useStepStore((s) => s.pickingZOrigin);
   const cancelPickOrigin  = useStepStore((s) => s.cancelPickOrigin);
   const cancelPickZOrigin = useStepStore((s) => s.cancelPickZOrigin);
+  const measuring         = useStepStore((s) => s.measuring);
+  const stopMeasure       = useStepStore((s) => s.stopMeasure);
   const selectionMode     = useUiStore((s) => s.selectionMode);
   const showBasePlate     = useUiStore((s) => s.showBasePlate);
   const showToolpaths     = useUiStore((s) => s.showToolpaths);
@@ -153,7 +194,7 @@ export default function StepViewport() {
   const viewportBg         = theme === "dark" ? "#2a2a2a" : "#e8e8f2";
 
   const hasGeometry = faces.length > 0 || edges.length > 0;
-  const inPickMode  = pickingOrigin || pickingZOrigin;
+  const inPickMode  = pickingOrigin || pickingZOrigin || measuring;
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -187,6 +228,16 @@ export default function StepViewport() {
           Click a face or edge point to set Z origin — Esc to cancel
         </div>
       )}
+      {measuring && (
+        <div style={{
+          position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
+          background: "rgba(34,211,238,0.10)", border: "1px solid #22d3ee66", borderRadius: 6,
+          color: "#0e7490", fontSize: 11, padding: "5px 12px", zIndex: 10,
+          pointerEvents: "none",
+        }}>
+          Click an edge or face point to read its location — Esc to stop
+        </div>
+      )}
       <Canvas
         camera={{ fov: 50, near: 0.1, far: 100000, position: [0, -300, 200] }}
         style={{ background: viewportBg, cursor: inPickMode ? "crosshair" : "default" }}
@@ -195,6 +246,7 @@ export default function StepViewport() {
           if (e.key === "Escape") {
             if (pickingOrigin) cancelPickOrigin();
             if (pickingZOrigin) cancelPickZOrigin();
+            if (measuring) stopMeasure();
           }
         }}
         tabIndex={0}

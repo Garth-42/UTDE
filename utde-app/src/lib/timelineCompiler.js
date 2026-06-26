@@ -30,10 +30,14 @@ export async function compileTimeline({ entriesOverride } = {}) {
 
   const machineId = useMachineStore.getState().currentId || "gantry_5axis_ac";
 
+  // Bake the workpiece transform into the geometry so generated toolpaths follow
+  // the part's re-oriented/translated pose.
+  const { faces, edges } = step.getTransformedGeometry();
+
   const body = {
     entries: entriesOverride || ops.entries,
-    faces:   step.faces,
-    edges:   step.edges,
+    faces,
+    edges,
     machine: machineId,
     workspace_origin: step.workspaceOrigin,
   };

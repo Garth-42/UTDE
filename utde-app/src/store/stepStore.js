@@ -1,4 +1,12 @@
 import { create } from "zustand";
+import {
+  IDENTITY_TRANSFORM,
+  alignFaceToBedMatrix,
+  lowestZ,
+  composeRotateZ,
+  transformPoint,
+  applyTransformToGeometry,
+} from "../lib/geomTransform";
 
 function computeBounds(faces, edges) {
   let xMin = Infinity, xMax = -Infinity;
@@ -46,6 +54,14 @@ export const useStepStore = create((set, get) => ({
   zOverrideActive: false,  // whether Z was separately picked
   xyOriginZ: null,         // Z that came from the XY pick (to restore if Z override is cleared)
 
+  // Workpiece transform (re-orient / translate the imported part)
+  transform: IDENTITY_TRANSFORM,   // { translation:[x,y,z], quaternion:[x,y,z,w] }
+  gizmoMode: "off",                // "off" | "translate" | "rotate"
+
+  // Measure tool (find the XYZ location of an edge/point)
+  measuring: false,
+  measurement: null,               // { point:[x,y,z], kind, id, summary } | null
+
   // UI state
   isLoading: false,
   error: null,
@@ -57,6 +73,10 @@ export const useStepStore = create((set, get) => ({
       selectedFaceIds: new Set(),
       selectedEdgeIds: new Set(),
       selectedVertexIds: new Set(),
+      transform: IDENTITY_TRANSFORM,   // fresh part → identity pose
+      gizmoMode: "off",
+      measuring: false,
+      measurement: null,
       error: null,
     }),
 
@@ -183,4 +203,60 @@ export const useStepStore = create((set, get) => ({
     const { edges, selectedEdgeIds } = get();
     return edges.filter((e) => selectedEdgeIds.has(e.id));
   },
+
+  // ── Workpiece transform actions ─────────────────────────────────────────────
+  setTransform: (transform) => set({ transform }),
+  setGizmoMode: (gizmoMode) => set({ gizmoMode }),
+  resetTransform: () => set({ transform: IDENTITY_TRANSFORM, gizmoMode: "off" }),
+
+  /** Lay the single selected planar face flat on the bed (face-down). Returns
+   *  true on success, false if there isn't exactly one planar face selected. */
+  orientSelectedFaceToBed: () => {
+    const { faces, selectedFaceIds } = get();
+    const planar = faces.filter((f) => selectedFaceIds.has(f.id) && f.type === "plane");
+    if (planar.length !== 1) return false;
+    set({ transform: alignFaceToBedMatrix(planar[0]) });
+    return true;
+  },
+
+  /** Translate down so the lowest point sits on Z=0. */
+  dropToBed: () => set((s) => {
+    const dz = lowestZ(s.faces, s.transform);
+    const [tx, ty, tz] = s.transform.translation;
+    return { transform: { ...s.transform, translation: [tx, ty, tz - dz] } };
+  }),
+
+  /** Absolute translation (any axis omitted keeps its current value). */
+  setTranslation: ({ x, y, z }) => set((s) => {
+    const [tx, ty, tz] = s.transform.translation;
+    return { transform: { ...s.transform, translation: [x ?? tx, y ?? ty, z ?? tz] } };
+  }),
+
+  /** Rotate about world Z (degrees) through the part centroid. */
+  rotateTransformZ: (deg) => set((s) => {
+    const b = computeBounds(s.faces, s.edges);
+    let about = s.transform.translation;
+    if (b) {
+      about = transformPoint(s.transform, [
+        (b.xMin + b.xMax) / 2, (b.yMin + b.yMax) / 2, (b.zMin + b.zMax) / 2,
+      ]);
+    }
+    return { transform: composeRotateZ(s.transform, deg, about) };
+  }),
+
+  /** Faces/edges with the workpiece transform baked in — the geometry the
+   *  toolpath engine should consume. Returns originals when identity. */
+  getTransformedGeometry: () => {
+    const { faces, edges, transform } = get();
+    return applyTransformToGeometry(faces, edges, transform);
+  },
+
+  // ── Measure tool ────────────────────────────────────────────────────────────
+  startMeasure: () => set({ measuring: true }),
+  stopMeasure: () => set({ measuring: false }),
+  clearMeasurement: () => set({ measurement: null }),
+  /** Record a measured location. `point` is world XYZ from the raycaster;
+   *  `meta` carries { kind, id, summary } for the readout. Stays in measuring
+   *  mode so consecutive picks work. */
+  setMeasurement: (point, meta = {}) => set({ measurement: { point, ...meta } }),
 }));
