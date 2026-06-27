@@ -59,4 +59,12 @@ describe("MeasurePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Clear/i }));
     expect(useStepStore.getState().measurement).toBeNull();
   });
+
+  it("collapses its section header to hide the controls", () => {
+    useStepStore.setState({ edges: [{ id: 0, type: "line", vertices: [] }] });
+    const { container } = render(<MeasurePanel />);
+    expect(screen.getByRole("button", { name: /Measure location/i })).toBeInTheDocument();
+    fireEvent.click(container.querySelector("[aria-expanded]")); // section header
+    expect(screen.queryByRole("button", { name: /Measure location/i })).toBeNull();
+  });
 });

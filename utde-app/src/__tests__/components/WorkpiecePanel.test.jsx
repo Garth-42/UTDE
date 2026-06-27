@@ -66,4 +66,12 @@ describe("WorkpiecePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Reset/i }));
     expect(isIdentity(useStepStore.getState().transform)).toBe(true);
   });
+
+  it("collapses its section header to hide the controls", () => {
+    useStepStore.setState({ faces: [planeFace(0)], selectedFaceIds: new Set([0]) });
+    const { container } = render(<WorkpiecePanel />);
+    expect(screen.getByRole("button", { name: /Align face/i })).toBeInTheDocument();
+    fireEvent.click(container.querySelector("[aria-expanded]")); // section header
+    expect(screen.queryByRole("button", { name: /Align face/i })).toBeNull();
+  });
 });

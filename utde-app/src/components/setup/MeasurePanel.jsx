@@ -1,28 +1,18 @@
 /**
- * MeasurePanel — overlay (bottom-left of the Setup viewport) for reading the
- * XYZ location of an edge/point. Toggle it on, click an edge (or face point),
- * and the readout shows the picked world coordinate (and, when a workspace
- * origin is set, the WCS-relative coordinate) plus the edge's endpoints /
- * center / length / radius. The 3D marker is rendered by StepViewport.
+ * MeasurePanel — a Utilities section for reading the XYZ location of an
+ * edge/point. Toggle it on, click an edge (or face point), and the readout
+ * shows the picked world coordinate (and, when a workspace origin is set, the
+ * WCS-relative coordinate) plus the edge's endpoints / center / length /
+ * radius. The 3D marker is rendered by StepViewport.
  */
 
 import { useStepStore } from "../../store/stepStore";
+import CollapsibleSection from "./CollapsibleSection";
 
 const fmt = (n) => (n == null || Number.isNaN(n) ? "—" : n.toFixed(2));
 const vec = (p) => (p ? `${fmt(p[0])}, ${fmt(p[1])}, ${fmt(p[2])}` : "—");
 
 const STYLES = {
-  card: {
-    position: "absolute", left: 14, bottom: 44, width: 230,
-    background: "var(--panel)", border: "1px solid var(--border)",
-    borderRadius: "var(--r-lg)", boxShadow: "var(--shadow-sm)",
-    padding: 10, display: "flex", flexDirection: "column", gap: 8,
-    fontSize: 12, color: "var(--ink-2)", zIndex: 5,
-  },
-  head: {
-    fontSize: 11, fontWeight: 600, textTransform: "uppercase",
-    letterSpacing: "0.04em", color: "var(--ink-2)",
-  },
   btn: (active) => ({
     padding: "5px 8px",
     border: `1px solid ${active ? "#0e7490" : "var(--border)"}`,
@@ -69,8 +59,7 @@ export default function MeasurePanel() {
   const s = m?.summary || {};
 
   return (
-    <div style={STYLES.card} aria-label="Measure tool">
-      <div style={STYLES.head}>Measure</div>
+    <CollapsibleSection title="Measure">
       <button
         type="button"
         style={STYLES.btn(measuring)}
@@ -95,6 +84,6 @@ export default function MeasurePanel() {
           </button>
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }
