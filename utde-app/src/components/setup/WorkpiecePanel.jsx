@@ -11,19 +11,9 @@
 
 import { useState } from "react";
 import { useStepStore } from "../../store/stepStore";
+import CollapsibleSection from "./CollapsibleSection";
 
 const STYLES = {
-  card: {
-    position: "absolute", top: 14, right: 14, width: 212,
-    background: "var(--panel)", border: "1px solid var(--border)",
-    borderRadius: "var(--r-lg)", boxShadow: "var(--shadow-sm)",
-    padding: 10, display: "flex", flexDirection: "column", gap: 8,
-    fontSize: 12, color: "var(--ink-2)", zIndex: 5,
-  },
-  head: {
-    fontSize: 11, fontWeight: 600, textTransform: "uppercase",
-    letterSpacing: "0.04em", color: "var(--ink-2)",
-  },
   row: { display: "flex", gap: 6 },
   btn: (active) => ({
     flex: 1, padding: "5px 6px",
@@ -73,9 +63,7 @@ export default function WorkpiecePanel() {
   };
 
   return (
-    <div style={STYLES.card} aria-label="Workpiece transform">
-      <div style={STYLES.head}>Workpiece</div>
-
+    <CollapsibleSection title="Workpiece">
       <button
         type="button"
         style={{ ...STYLES.btn(false), ...(planarSelected ? {} : STYLES.btnDisabled) }}
@@ -146,6 +134,6 @@ export default function WorkpiecePanel() {
         <button type="button" style={STYLES.btn(false)} onClick={() => rotateZ(-rotStep)} title="Rotate −">⟲</button>
         <button type="button" style={STYLES.btn(false)} onClick={() => rotateZ(rotStep)} title="Rotate +">⟳</button>
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }
