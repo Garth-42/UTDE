@@ -11,6 +11,7 @@ const planeFace = (id) => ({
 });
 
 beforeEach(() => {
+  localStorage.clear();
   useStepStore.setState({
     faces: [], edges: [], selectedFaceIds: new Set(),
     transform: IDENTITY_TRANSFORM, gizmoMode: "off",
@@ -73,5 +74,15 @@ describe("WorkpiecePanel", () => {
     expect(screen.getByRole("button", { name: /Align face/i })).toBeInTheDocument();
     fireEvent.click(container.querySelector("[aria-expanded]")); // section header
     expect(screen.queryByRole("button", { name: /Align face/i })).toBeNull();
+  });
+
+  it("remembers its collapsed state across remounts", () => {
+    useStepStore.setState({ faces: [planeFace(0)], selectedFaceIds: new Set([0]) });
+    const first = render(<WorkpiecePanel />);
+    fireEvent.click(first.container.querySelector("[aria-expanded]"));
+    expect(localStorage.getItem("utde-section-workpiece")).toBe("1");
+    first.unmount();
+    render(<WorkpiecePanel />);
+    expect(screen.queryByRole("button", { name: /Align face/i })).toBeNull(); // still collapsed
   });
 });

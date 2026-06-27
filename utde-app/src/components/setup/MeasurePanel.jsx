@@ -59,7 +59,7 @@ export default function MeasurePanel() {
   const s = m?.summary || {};
 
   return (
-    <CollapsibleSection title="Measure">
+    <CollapsibleSection title="Measure" storageKey="measure">
       <button
         type="button"
         style={STYLES.btn(measuring)}

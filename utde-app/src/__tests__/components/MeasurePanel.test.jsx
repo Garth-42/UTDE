@@ -4,6 +4,7 @@ import MeasurePanel from "../../components/setup/MeasurePanel";
 import { useStepStore } from "../../store/stepStore";
 
 beforeEach(() => {
+  localStorage.clear();
   useStepStore.setState({
     faces: [], edges: [], measuring: false, measurement: null, workspaceOrigin: null,
   });

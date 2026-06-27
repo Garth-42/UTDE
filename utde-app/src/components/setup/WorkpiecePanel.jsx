@@ -63,7 +63,7 @@ export default function WorkpiecePanel() {
   };
 
   return (
-    <CollapsibleSection title="Workpiece">
+    <CollapsibleSection title="Workpiece" storageKey="workpiece">
       <button
         type="button"
         style={{ ...STYLES.btn(false), ...(planarSelected ? {} : STYLES.btnDisabled) }}
