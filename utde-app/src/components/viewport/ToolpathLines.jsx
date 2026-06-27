@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import { useToolpathStore } from "../../store/toolpathStore";
+import { useUiStore } from "../../store/uiStore";
+import { gcodeLineForPoint } from "../../lib/gcodeSync";
 
 /**
  * Sequential progressive reveal across the entire timeline.
@@ -113,6 +115,10 @@ export default function ToolpathLines() {
   const activeIds    = useToolpathStore((s) => s.activeIds);
   const animProgress = useToolpathStore((s) => s.animProgress);
   const showNormals  = useToolpathStore((s) => s.showNormals);
+  const gcode        = useToolpathStore((s) => s.gcode);
+  const opRanges     = useToolpathStore((s) => s.opRanges);
+  const setSelectedLine = useToolpathStore((s) => s.setSelectedLine);
+  const tab          = useUiStore((s) => s.tab);
 
   const visible = toolpaths.filter((tp) => activeIds.has(tp.id));
   const totalPoints = visible.reduce((n, tp) => n + (tp.points?.length || 0), 0);
@@ -121,8 +127,19 @@ export default function ToolpathLines() {
   const cursor = Math.max(0, Math.min(totalPoints, Math.floor(totalPoints * animProgress)));
   let consumed = 0;
 
+  // Post tab: click the toolpath in 3D to select the matching G-code line
+  // (the global point order matches op_ranges, so we scan all op toolpaths).
+  const handleClick = (e) => {
+    if (tab !== "post") return;
+    e.stopPropagation();
+    const line = gcodeLineForPoint(
+      toolpaths, gcode, opRanges, [e.point.x, e.point.y, e.point.z]
+    );
+    if (line >= 0) setSelectedLine(line);
+  };
+
   return (
-    <>
+    <group onClick={handleClick}>
       {visible.map((tp) => {
         const len = tp.points?.length || 0;
         const remaining = Math.max(0, cursor - consumed);
@@ -140,6 +157,6 @@ export default function ToolpathLines() {
           />
         );
       })}
-    </>
+    </group>
   );
 }
