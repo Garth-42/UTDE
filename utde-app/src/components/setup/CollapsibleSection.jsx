@@ -1,6 +1,7 @@
 /**
  * CollapsibleSection — a labelled, collapsible block used inside the Utilities
- * panel. A full-width header button (title + chevron) toggles its body.
+ * panel. A full-width header button (title + chevron) toggles its body. Pass a
+ * `storageKey` to remember the collapsed state across sessions (localStorage).
  */
 import { useState } from "react";
 
@@ -17,15 +18,32 @@ const STYLES = {
   body: { display: "flex", flexDirection: "column", gap: 8 },
 };
 
-export default function CollapsibleSection({ title, defaultCollapsed = false, children }) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+export default function CollapsibleSection({ title, storageKey, defaultCollapsed = false, children }) {
+  const lsKey = storageKey ? `utde-section-${storageKey}` : null;
+  const [collapsed, setCollapsed] = useState(() => {
+    if (lsKey) {
+      try {
+        const v = localStorage.getItem(lsKey);
+        if (v != null) return v === "1";
+      } catch (e) { /* ignore */ }
+    }
+    return defaultCollapsed;
+  });
+  const toggle = () =>
+    setCollapsed((c) => {
+      const next = !c;
+      if (lsKey) {
+        try { localStorage.setItem(lsKey, next ? "1" : "0"); } catch (e) { /* ignore */ }
+      }
+      return next;
+    });
   return (
     <div style={STYLES.section}>
       <button
         type="button"
         style={STYLES.header}
         aria-expanded={!collapsed}
-        onClick={() => setCollapsed((c) => !c)}
+        onClick={toggle}
       >
         <span>{title}</span>
         <span style={STYLES.chevron}>{collapsed ? "▸" : "▾"}</span>
