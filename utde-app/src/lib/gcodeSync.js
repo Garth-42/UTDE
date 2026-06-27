@@ -69,3 +69,38 @@ export function buildPointToLineMap(gcode, opRanges, totalPoints = 0) {
   }
   return map;
 }
+
+/** Total number of points across the op toolpaths (the global point order). */
+function totalPoints(toolpaths) {
+  return (toolpaths || []).reduce((n, tp) => n + (tp.points?.length || 0), 0);
+}
+
+/**
+ * Global index of the toolpath point nearest a 3D world point `[x,y,z]`,
+ * scanning the op toolpaths in order (matching op_ranges). -1 if none.
+ */
+export function nearestToolpathPointIndex(toolpaths, point) {
+  let best = -1;
+  let bestD = Infinity;
+  let idx = 0;
+  for (const tp of toolpaths || []) {
+    for (const p of tp.points || []) {
+      const dx = p.x - point[0], dy = p.y - point[1], dz = p.z - point[2];
+      const d = dx * dx + dy * dy + dz * dz;
+      if (d < bestD) { bestD = d; best = idx; }
+      idx++;
+    }
+  }
+  return best;
+}
+
+/**
+ * The G-code line for a 3D click on the toolpath: nearest point → its line.
+ * Returns -1 when there's no toolpath or no mapped line.
+ */
+export function gcodeLineForPoint(toolpaths, gcode, opRanges, point) {
+  const idx = nearestToolpathPointIndex(toolpaths, point);
+  if (idx < 0) return -1;
+  const rev = buildPointToLineMap(gcode, opRanges, totalPoints(toolpaths));
+  return idx < rev.length ? rev[idx] : -1;
+}

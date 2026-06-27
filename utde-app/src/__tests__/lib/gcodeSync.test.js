@@ -4,6 +4,8 @@ import {
   buildLineToPointMap,
   buildPointToLineMap,
   cursorGlobalIndex,
+  nearestToolpathPointIndex,
+  gcodeLineForPoint,
 } from "../../lib/gcodeSync";
 
 const pt = (x = 0) => ({ x, y: 0, z: 0 });
@@ -88,5 +90,28 @@ describe("cursorGlobalIndex", () => {
     const rev = buildPointToLineMap(GCODE, OP_RANGES, 4);
     expect(rev[cursorGlobalIndex(TOOLPATHS, 1)]).toBe(8); // last point → line 8
     expect(rev[cursorGlobalIndex(TOOLPATHS, 0)]).toBe(3); // first point → line 3
+  });
+});
+
+describe("nearestToolpathPointIndex", () => {
+  it("returns the global index of the closest point", () => {
+    expect(nearestToolpathPointIndex(TOOLPATHS, [0.1, 0, 0])).toBe(0);
+    expect(nearestToolpathPointIndex(TOOLPATHS, [1.4, 0, 0])).toBe(1); // closer to x=1
+    expect(nearestToolpathPointIndex(TOOLPATHS, [2.1, 0, 0])).toBe(2);
+    expect(nearestToolpathPointIndex(TOOLPATHS, [3.0, 0, 0])).toBe(3);
+  });
+  it("returns -1 with no toolpaths", () => {
+    expect(nearestToolpathPointIndex([], [0, 0, 0])).toBe(-1);
+  });
+});
+
+describe("gcodeLineForPoint", () => {
+  it("maps a 3D click to the nearest point's G-code line", () => {
+    expect(gcodeLineForPoint(TOOLPATHS, GCODE, OP_RANGES, [0.1, 0, 0])).toBe(3);
+    expect(gcodeLineForPoint(TOOLPATHS, GCODE, OP_RANGES, [2.1, 0, 0])).toBe(7);
+    expect(gcodeLineForPoint(TOOLPATHS, GCODE, OP_RANGES, [3.0, 0, 0])).toBe(8);
+  });
+  it("returns -1 with no toolpaths", () => {
+    expect(gcodeLineForPoint([], GCODE, OP_RANGES, [0, 0, 0])).toBe(-1);
   });
 });
