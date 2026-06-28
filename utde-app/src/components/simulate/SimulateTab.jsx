@@ -11,7 +11,7 @@
  *   - Status pill (bottom-right): playing / paused indicator
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import I from "../icons";
 import StepViewport from "../viewport/StepViewport";
 import { useToolpathStore } from "../../store/toolpathStore";
@@ -165,6 +165,7 @@ const STYLES = {
     display: "flex",
     alignItems: "center",
     cursor: "pointer",
+    touchAction: "none",
   },
   trackBg: {
     position: "absolute",
@@ -252,15 +253,35 @@ export default function SimulateTab() {
   // also used by the Post tab's scrubber).
   const currentLine = useCursorLineSync();
 
+  const trackRef = useRef(null);
+
   function togglePlay() {
     if (isAnimating) stopAnimation();
     else             startAnimation();
   }
 
-  function onTrackClick(e) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  // Click-and-drag scrubbing, matching the Post tab's native range slider.
+  // Mouse-down seeks immediately, then move events scrub continuously until
+  // the button is released anywhere on the page.
+  function seekFromX(clientX) {
+    const el = trackRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     setProgress(pct);
+  }
+
+  function onTrackMouseDown(e) {
+    e.preventDefault();
+    seekFromX(e.clientX);
+
+    const onMove = (ev) => seekFromX(ev.clientX);
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   }
 
   return (
@@ -384,8 +405,9 @@ export default function SimulateTab() {
             </div>
 
             <div
+              ref={trackRef}
               style={STYLES.trackWrap}
-              onClick={onTrackClick}
+              onMouseDown={onTrackMouseDown}
               role="slider"
               aria-label="Scrub toolpath"
               aria-valuemin={0}

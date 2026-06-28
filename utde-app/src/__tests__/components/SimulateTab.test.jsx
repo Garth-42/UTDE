@@ -130,4 +130,47 @@ describe("SimulateTab — with toolpaths", () => {
     fireEvent.click(screen.getByRole("button", { name: "4×" }));
     expect(useToolpathStore.getState().simSpeed).toBe(4);
   });
+
+  it("mouse-down on the track seeks to the clicked position", () => {
+    render(<SimulateTab />);
+    const track = screen.getByRole("slider");
+    track.getBoundingClientRect = () => ({ left: 0, width: 200 });
+    fireEvent.mouseDown(track, { clientX: 50 });
+    expect(useToolpathStore.getState().animProgress).toBeCloseTo(0.25, 5);
+  });
+
+  it("dragging after mouse-down scrubs continuously", () => {
+    render(<SimulateTab />);
+    const track = screen.getByRole("slider");
+    track.getBoundingClientRect = () => ({ left: 0, width: 200 });
+    fireEvent.mouseDown(track, { clientX: 0 });
+    expect(useToolpathStore.getState().animProgress).toBeCloseTo(0, 5);
+    // Move events on the window continue the scrub while the button is held.
+    fireEvent.mouseMove(window, { clientX: 150 });
+    expect(useToolpathStore.getState().animProgress).toBeCloseTo(0.75, 5);
+    fireEvent.mouseMove(window, { clientX: 200 });
+    expect(useToolpathStore.getState().animProgress).toBeCloseTo(1, 5);
+  });
+
+  it("drag clamps progress to the [0, 1] range", () => {
+    render(<SimulateTab />);
+    const track = screen.getByRole("slider");
+    track.getBoundingClientRect = () => ({ left: 0, width: 200 });
+    fireEvent.mouseDown(track, { clientX: -80 });
+    expect(useToolpathStore.getState().animProgress).toBe(0);
+    fireEvent.mouseMove(window, { clientX: 999 });
+    expect(useToolpathStore.getState().animProgress).toBe(1);
+  });
+
+  it("stops scrubbing after the mouse button is released", () => {
+    render(<SimulateTab />);
+    const track = screen.getByRole("slider");
+    track.getBoundingClientRect = () => ({ left: 0, width: 200 });
+    fireEvent.mouseDown(track, { clientX: 100 });
+    expect(useToolpathStore.getState().animProgress).toBeCloseTo(0.5, 5);
+    fireEvent.mouseUp(window);
+    // Further moves are ignored once the listeners are detached.
+    fireEvent.mouseMove(window, { clientX: 0 });
+    expect(useToolpathStore.getState().animProgress).toBeCloseTo(0.5, 5);
+  });
 });
