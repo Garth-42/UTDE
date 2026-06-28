@@ -131,24 +131,24 @@ describe("SimulateTab — with toolpaths", () => {
     expect(useToolpathStore.getState().simSpeed).toBe(4);
   });
 
-  it("mouse-down on the track seeks to the clicked position", () => {
+  it("pointer-down on the track seeks to the pressed position", () => {
     render(<SimulateTab />);
     const track = screen.getByRole("slider");
     track.getBoundingClientRect = () => ({ left: 0, width: 200 });
-    fireEvent.mouseDown(track, { clientX: 50 });
+    fireEvent.pointerDown(track, { clientX: 50 });
     expect(useToolpathStore.getState().animProgress).toBeCloseTo(0.25, 5);
   });
 
-  it("dragging after mouse-down scrubs continuously", () => {
+  it("dragging after pointer-down scrubs continuously (touch + mouse + pen)", () => {
     render(<SimulateTab />);
     const track = screen.getByRole("slider");
     track.getBoundingClientRect = () => ({ left: 0, width: 200 });
-    fireEvent.mouseDown(track, { clientX: 0 });
+    fireEvent.pointerDown(track, { clientX: 0, pointerType: "touch" });
     expect(useToolpathStore.getState().animProgress).toBeCloseTo(0, 5);
-    // Move events on the window continue the scrub while the button is held.
-    fireEvent.mouseMove(window, { clientX: 150 });
+    // Move events on the window continue the scrub while the pointer is held.
+    fireEvent.pointerMove(window, { clientX: 150, pointerType: "touch" });
     expect(useToolpathStore.getState().animProgress).toBeCloseTo(0.75, 5);
-    fireEvent.mouseMove(window, { clientX: 200 });
+    fireEvent.pointerMove(window, { clientX: 200, pointerType: "touch" });
     expect(useToolpathStore.getState().animProgress).toBeCloseTo(1, 5);
   });
 
@@ -156,21 +156,33 @@ describe("SimulateTab — with toolpaths", () => {
     render(<SimulateTab />);
     const track = screen.getByRole("slider");
     track.getBoundingClientRect = () => ({ left: 0, width: 200 });
-    fireEvent.mouseDown(track, { clientX: -80 });
+    fireEvent.pointerDown(track, { clientX: -80 });
     expect(useToolpathStore.getState().animProgress).toBe(0);
-    fireEvent.mouseMove(window, { clientX: 999 });
+    fireEvent.pointerMove(window, { clientX: 999 });
     expect(useToolpathStore.getState().animProgress).toBe(1);
   });
 
-  it("stops scrubbing after the mouse button is released", () => {
+  it("stops scrubbing after the pointer is released", () => {
     render(<SimulateTab />);
     const track = screen.getByRole("slider");
     track.getBoundingClientRect = () => ({ left: 0, width: 200 });
-    fireEvent.mouseDown(track, { clientX: 100 });
+    fireEvent.pointerDown(track, { clientX: 100 });
     expect(useToolpathStore.getState().animProgress).toBeCloseTo(0.5, 5);
-    fireEvent.mouseUp(window);
+    fireEvent.pointerUp(window);
     // Further moves are ignored once the listeners are detached.
-    fireEvent.mouseMove(window, { clientX: 0 });
+    fireEvent.pointerMove(window, { clientX: 0 });
+    expect(useToolpathStore.getState().animProgress).toBeCloseTo(0.5, 5);
+  });
+
+  it("pointercancel (e.g. interrupted touch) ends the scrub", () => {
+    render(<SimulateTab />);
+    const track = screen.getByRole("slider");
+    track.getBoundingClientRect = () => ({ left: 0, width: 200 });
+    fireEvent.pointerDown(track, { clientX: 100, pointerType: "touch" });
+    expect(useToolpathStore.getState().animProgress).toBeCloseTo(0.5, 5);
+    fireEvent.pointerCancel(window);
+    // Listeners detached on cancel — later moves are ignored.
+    fireEvent.pointerMove(window, { clientX: 0 });
     expect(useToolpathStore.getState().animProgress).toBeCloseTo(0.5, 5);
   });
 });

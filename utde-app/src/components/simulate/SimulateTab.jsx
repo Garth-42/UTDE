@@ -261,8 +261,9 @@ export default function SimulateTab() {
   }
 
   // Click-and-drag scrubbing, matching the Post tab's native range slider.
-  // Mouse-down seeks immediately, then move events scrub continuously until
-  // the button is released anywhere on the page.
+  // Uses pointer events so mouse, touch, and pen all scrub identically: the
+  // pointer-down seeks immediately, then move events scrub continuously until
+  // the pointer is released or canceled anywhere on the page.
   function seekFromX(clientX) {
     const el = trackRef.current;
     if (!el) return;
@@ -271,17 +272,20 @@ export default function SimulateTab() {
     setProgress(pct);
   }
 
-  function onTrackMouseDown(e) {
+  function onTrackPointerDown(e) {
+    // Prevent the touch from also scrolling/selecting while scrubbing.
     e.preventDefault();
     seekFromX(e.clientX);
 
     const onMove = (ev) => seekFromX(ev.clientX);
-    const onUp = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    const onEnd = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
   }
 
   return (
@@ -407,7 +411,7 @@ export default function SimulateTab() {
             <div
               ref={trackRef}
               style={STYLES.trackWrap}
-              onMouseDown={onTrackMouseDown}
+              onPointerDown={onTrackPointerDown}
               role="slider"
               aria-label="Scrub toolpath"
               aria-valuemin={0}
