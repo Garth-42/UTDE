@@ -54,9 +54,36 @@ _LAST_MODEL_PATH = None
 
 
 def _apply_cors(flask_app):
-    """Apply CORS headers for development. Allows all origins (local server only)."""
-    if _CORS_AVAILABLE:
-        _CORS(flask_app, origins="*")
+    """Apply CORS headers for local development.
+
+    Defaults to the Vite dev origins only (``localhost:3000`` / ``127.0.0.1:3000``)
+    rather than ``*`` — with ``*`` any web page the developer visits could drive
+    this loopback server from their browser (and, combined with ``/run-script``,
+    execute code on their machine). Override with ``UTDE_CORS_ORIGINS``
+    (comma-separated origins, or the literal ``*`` to allow all — not advised).
+    """
+    if not _CORS_AVAILABLE:
+        return
+    raw = os.environ.get("UTDE_CORS_ORIGINS", "").strip()
+    if raw == "*":
+        origins = "*"
+    elif raw:
+        origins = [o.strip() for o in raw.split(",") if o.strip()]
+    else:
+        origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    _CORS(flask_app, origins=origins)
+
+
+def _run_script_enabled():
+    """True only when the operator explicitly opts in via ``UTDE_ENABLE_RUN_SCRIPT``.
+
+    ``/run-script`` executes arbitrary Python with the server's own privileges
+    (see its docstring) — it is process isolation, not a security sandbox — so it
+    is off by default. The browser build runs user scripts sandboxed in Pyodide.
+    """
+    return os.environ.get("UTDE_ENABLE_RUN_SCRIPT", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
 
 
 def _enable_static_serving(flask_app, static_dir):
@@ -673,9 +700,24 @@ def lint_script():
 @app.route("/run-script", methods=["POST"])
 def run_script():
     """
-    Execute a UTDE Python script in a sandboxed subprocess.
+    Execute a UTDE Python script in an isolated subprocess (dedicated temp
+    working directory, wall-clock timeout). This is *process isolation, not a
+    security sandbox*: the child runs as the same user with full filesystem and
+    network access. It is therefore disabled unless ``UTDE_ENABLE_RUN_SCRIPT`` is
+    set, and should only be enabled on a trusted, loopback-bound dev server —
+    never on a public (``0.0.0.0``) bind. The browser build runs user scripts in
+    a real sandbox (Pyodide, the user's own tab) instead.
+
     Returns stdout, stderr, and G-code file contents if written.
     """
+    if not _run_script_enabled():
+        return jsonify({
+            "error": "Server-side script execution is disabled. It runs arbitrary "
+                     "Python with no sandbox; set UTDE_ENABLE_RUN_SCRIPT=1 on a "
+                     "trusted, loopback-only server to enable it. In the browser, "
+                     "scripts already run sandboxed in Pyodide.",
+        }), 403
+
     data = request.get_json(force=True)
     code = data.get("code", "")
 
@@ -829,6 +871,15 @@ if __name__ == "__main__":
 
     if not args.no_cors:
         _apply_cors(app)
+
+    if _run_script_enabled() and args.host not in ("127.0.0.1", "localhost", "::1"):
+        print(
+            f"WARNING: UTDE_ENABLE_RUN_SCRIPT is set and the server is bound to a "
+            f"non-loopback interface ({args.host}). /run-script executes arbitrary "
+            f"Python with no sandbox — this exposes remote code execution. Bind to "
+            f"127.0.0.1 or unset UTDE_ENABLE_RUN_SCRIPT.",
+            file=sys.stderr, flush=True,
+        )
 
     print(f"UTDE STEP Server → http://{args.host}:{args.port}")
     print(f"pythonocc-core: {'available' if OCC_AVAILABLE else 'NOT FOUND'}")
