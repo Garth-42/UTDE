@@ -9,6 +9,23 @@ describe("timelineToScript", () => {
     expect(out).toContain("post  = PostProcessor(machine)");
   });
 
+  it("emits the template-registration import so get_process resolves", () => {
+    // Without importing toolpath_engine.templates the process registry is empty
+    // and get_process('pocket') raises — the script must register them.
+    const out = timelineToScript([]);
+    expect(out).toContain("import toolpath_engine.templates");
+  });
+
+  it("emits runnable concatenation (combined += op), matching the real API", () => {
+    const out = timelineToScript([
+      { kind: "op", uid: "op_a", templateId: "pocket", name: "A",
+        params: { depth: 3 }, geometry: [[]], visible: true },
+    ]);
+    // ToolpathCollection defines __iadd__, so this is executable, not pseudocode.
+    expect(out).toContain("combined += a");
+    expect(out).toContain("resolve_ik=False");
+  });
+
   it("emits an op block with templateId, geometry, and params", () => {
     const out = timelineToScript([
       {

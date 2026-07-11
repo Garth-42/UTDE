@@ -61,14 +61,18 @@ from toolpath_engine.post.processor import PostConfig
     est_time=14.2,
     est_volume=6.8,
 )
-def ded_helical(model=None, params=None):
+def ded_helical(model=None, geometry=None, params=None):
     """
     Generate a 5-axis helical DED toolpath.
 
     Args:
-        model:  GeometryModel from a loaded STEP file (optional — uses synthetic
-                geometry if not provided, for testing/preview).
-        params: Dict of process overrides:
+        model:    GeometryModel from a loaded STEP file (optional — uses synthetic
+                  geometry if not provided, for testing/preview).
+        geometry: Resolved geometry slots (unused here; the helix is synthetic).
+                  Accepted so every template shares one (model, geometry, params)
+                  signature — the shape compile_timeline and the generated script
+                  both call.
+        params:   Dict of process overrides:
                   cylinder_radius  (mm, default 40)
                   helix_pitch      (mm per turn, default 5)
                   helix_turns      (default 4)
@@ -105,7 +109,7 @@ def ded_helical(model=None, params=None):
     # ── Geometry ──────────────────────────────────────────────────────────
     if model is not None:
         # In a real workflow, select the target surface from the loaded model
-        surfaces = model.select(tag="deposition_surface")
+        surfaces = model.select_surfaces(tag="deposition_surface")
         cylinder = surfaces[0] if surfaces else Surface.cylinder(
             center=(0, 0, 0), axis=(0, 0, 1), radius=radius, height=pitch * turns
         )

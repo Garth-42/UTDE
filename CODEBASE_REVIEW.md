@@ -14,6 +14,32 @@ Severity: 🔴 critical (wrong machine output / safety) · 🟠 moderate · 🟡
 
 ---
 
+## Resolution status (all items addressed)
+
+Every finding below has since been fixed on this branch, in the review's
+suggested order, each with tests. Suite totals after the work: **413 Python**,
+**363 JS**, all green.
+
+| § | Fix | Where |
+|---|---|---|
+| §1 | Tool axis emitted as an `I/J/K` vector on rotary machines (`output_ijk`) | `post/processor.py`, `webapi.py` |
+| §2 | Multi-op timeline assembled as one program (single header/`M30`/footer) | `webapi.compile_timeline`, `PostProcessor.process_body` |
+| §3 | `flag_codes` split out of value words + `bool` guard (no mid-program `M30`) | `post/processor.py` |
+| §4 | Freeform edges built via `Curve.from_points` (were silently dropped) | `webapi.build_geometry_dicts` |
+| §5 | Tilt measured from the nearest vertical pole | `orient/rules.py`, `simulation/__init__.py` |
+| §6 | Explicit `point_lines` map drives the Post-tab sync (heuristic fallback kept) | `webapi.py`, `lib/gcodeSync.js`, stores + viewport |
+| §8 | IK warm-started from the previous point's solution | `post/processor.py`, `kinematics/machine.py` |
+| §10 | `/run-script` opt-in only, CORS restricted, docstring corrected | `step_server.py` |
+| §11 | `ToolpathCollection.__iadd__/__add__`, uniform template signatures, real `GeometryModel` lookups, template-registration import → the generated Python runs | `core/toolpath.py`, `core/geometry.py`, `templates/`, `lib/timelineToScript.js` |
+| §14 | Architecture section, store list, and dev commands realigned | `CLAUDE.md` |
+
+Remaining as noted-only (larger efforts, not attempted here): §13 (mesh-backed
+`Surface` for real CAD faces), §12's deeper cleanup (prune unused Flask HTTP
+surface), the analytic-IK upgrade behind §8's warm-start, and the runtime CDN
+dependency in §12.
+
+---
+
 ## 1. 🔴 5-axis orientation is computed but never reaches the G-code _(verified)_
 
 The headline capability — surface-normal / lead / tilt orientation producing

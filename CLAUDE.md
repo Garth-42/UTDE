@@ -47,18 +47,17 @@ This project runs inside a **VS Code Dev Container** (`.devcontainer/devcontaine
 # Install the Python library in editable mode
 pip install -e utde_v0.1.0/
 
-# Start the Flask API server (listens on http://localhost:5174)
-# IMPORTANT: must be running for browser dev mode (localhost:3000) to work.
-# The Vite proxy forwards /api → localhost:5174. The Tauri sidecar binds a
-# random port instead and does NOT serve the browser proxy — always start
-# this separately before opening localhost:3000.
+# Start the Flask API server (listens on http://localhost:5174).
+# NOTE: the browser dev build (localhost:3000) runs the engine client-side in
+# Pyodide and does NOT need this server. It's for the Tauri sidecar, the Docker
+# deployment, and as a dev/test convenience for the API endpoints.
 python step_server.py --reload   # --reload watches all .py files and restarts on change (dev only)
 
 # Run the full workflow example
 python utde_v0.1.0/toolpath_engine/examples/demo_5axis_ded.py
 
-# Run Python tests (library + server)
-cd /workspaces/files && python -m pytest utde_v0.1.0/tests/ tests/ -v
+# Run Python tests (library + server) — from the repo root
+python -m pytest utde_v0.1.0/tests/ tests/ -v
 
 # Run a single test file
 python -m pytest tests/test_server.py -v
@@ -119,26 +118,40 @@ Data flows through a pipeline of composable components:
 - **Kinematics** (`kinematics/machine.py`): `Machine` defined as `Linear`/`Rotary` joint chains; IK solved via `scipy.optimize`
 - **Post-processor** (`post/processor.py`): Converts toolpaths to G-code
 
-**2. Flask API Server** (`step_server.py`)
+**2. Backend request logic** (`toolpath_engine/webapi.py` + `step_server.py`)
 
-Three main endpoints:
-- `POST /parse-step` — Tessellates uploaded STEP files using pythonocc → JSON (faces + edges)
-- `POST /generate-toolpath` — Receives strategy + orientation rule config, calls Python backend, returns toolpath points + G-code
-- `POST /run-script` — Executes arbitrary user Python code for custom workflows
+The request-handling *logic* lives in `webapi.py` as a pure, host-injected core:
+each function takes a request `dict` and returns a response `dict`, with no
+Flask/filesystem dependency. It is the single source of truth shared by two runners:
+
+- **In-browser (primary)**: the frontend runs `webapi` in **Pyodide** (a Web
+  Worker, `lib/pyodide/`), and parses STEP with **opencascade.js** (`lib/occt/`).
+  The browser build talks to no server — `api/client.js` delegates to `lib/runtime`.
+- **Flask server** (`step_server.py` — dev, Tauri sidecar, Docker): thin wrappers
+  that parse the HTTP request, call into `webapi`, and `jsonify` the result.
+  Endpoints: `/parse-step`, `/generate-toolpath`, `/compile-timeline`,
+  `/templates`, `/machines`, `/lint-script`, and `/run-script`. **`/run-script`
+  executes arbitrary Python and is disabled unless `UTDE_ENABLE_RUN_SCRIPT=1`** —
+  it is process isolation, not a security sandbox. (In the browser, scripts run
+  sandboxed in Pyodide.)
 
 **3. React Frontend** (`utde-app/src/`)
 
-Two-mode UI connected to Flask via `api/client.js`:
-- **STEP Import Mode**: Upload CAD file, inspect geometry, select faces/edges, set workspace origin
-- **Toolpath Mode**: Configure strategy & orientation rules, visualize paths, view generated Python/G-code
+A timeline-driven, **tabbed** UI (not a two-mode sidebar). The Setup tab authors
+an ordered timeline of op + orient + scene entries; Post shows the G-code with
+click-to-select line sync; Simulate plays the toolpath back. `api/client.js`
+delegates to the in-browser runtime, so the browser build needs no server.
 
-State managed with Zustand across four stores:
-- `stepStore` — Geometry, face/edge selection, workspace origin
-- `strategyStore` — Active strategy parameters + orientation rule chain
-- `toolpathStore` — Generated toolpath points
-- `uiStore` — Active mode and panel visibility
+State managed with Zustand across six stores (`src/store/`):
+- `stepStore` — parsed geometry, face/edge/vertex selection, workspace origin, workpiece transform, measure tool
+- `opsStore` — the timeline: ordered op / orient / scene entries + the active selection
+- `toolpathStore` — compiled toolpaths, G-code, op ranges, the `pointLines` map, and playback state
+- `machineStore` — the selected machine and session-imported machines
+- `runtimeStore` — Pyodide / OCCT runtime status
+- `uiStore` — active tab and panel visibility
 
-The 3D viewport (`components/viewport/`) uses React Three Fiber. The sidebar (`components/sidebar/`) renders panels contextually based on `uiStore` mode.
+The 3D viewport (`components/viewport/`) uses React Three Fiber. Tab panels live
+in `components/setup/`, `components/post/`, and `components/simulate/`.
 
 **Browser vs Tauri branching**: `IS_TAURI = "__TAURI_INTERNALS__" in window` gates all desktop-specific code. `src/lib/backend.js` abstracts platform differences: `getBaseUrl()` calls `invoke("get_server_port")` in Tauri vs returns `/api` in browser; `openStepFileDialog()` / `saveGcodeDialog()` use native dialogs in Tauri vs browser fallbacks.
 

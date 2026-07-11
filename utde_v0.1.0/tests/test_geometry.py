@@ -212,3 +212,26 @@ class TestGeometryModel:
     def test_repr(self):
         m = GeometryModel("mymodel")
         assert "mymodel" in repr(m)
+
+
+# ── GeometryModel lookups (used by the generated to_normal script) ────────────
+
+
+class TestGeometryModelLookups:
+    def test_face_by_id_matches_face_prefix(self):
+        m = GeometryModel()
+        m.add_surface(Surface.plane(name="face_7"))
+        assert m.face_by_id("7").name == "face_7"
+        assert m.face_by_id(7).name == "face_7"
+
+    def test_face_by_id_missing_returns_none(self):
+        assert GeometryModel().face_by_id("nope") is None
+
+    def test_top_surface_picks_highest_origin_z(self):
+        m = GeometryModel()
+        m.add_surface(Surface.plane(origin=(0, 0, 0), name="low"))
+        m.add_surface(Surface.plane(origin=(0, 0, 50), name="high"))
+        assert m.top_surface().name == "high"
+
+    def test_top_surface_empty_returns_none(self):
+        assert GeometryModel().top_surface() is None

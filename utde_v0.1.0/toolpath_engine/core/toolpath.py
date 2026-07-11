@@ -252,6 +252,33 @@ class ToolpathCollection:
                 self.layers[layer] = []
             self.layers[layer].append(toolpath)
 
+    # --- concatenation -------------------------------------------------------
+    def _merge_from(self, other: "ToolpathCollection"):
+        for tp in other.toolpaths:
+            self.toolpaths.append(tp)
+        for layer, tps in other.layers.items():
+            self.layers.setdefault(layer, []).extend(tps)
+
+    def __add__(self, other: "ToolpathCollection") -> "ToolpathCollection":
+        """Concatenate two collections into a new one (preserving layers).
+
+        Lets a timeline be assembled as ``combined = op_a + op_b`` — the exact
+        API the Setup-tab's generated Python emits.
+        """
+        if not isinstance(other, ToolpathCollection):
+            return NotImplemented
+        result = ToolpathCollection(name=self.name or other.name)
+        result._merge_from(self)
+        result._merge_from(other)
+        return result
+
+    def __iadd__(self, other: "ToolpathCollection") -> "ToolpathCollection":
+        """In-place concatenation so ``combined += op`` works."""
+        if not isinstance(other, ToolpathCollection):
+            return NotImplemented
+        self._merge_from(other)
+        return self
+
     def all_points(self) -> List[ToolpathPoint]:
         """Flat list of all points across all toolpaths."""
         pts = []

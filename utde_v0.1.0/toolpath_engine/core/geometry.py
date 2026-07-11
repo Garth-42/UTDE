@@ -426,6 +426,30 @@ class GeometryModel:
                     self.tags[tag] = []
                 self.tags[tag].append(curve.name)
 
+    def face_by_id(self, fid) -> Optional[Surface]:
+        """Look up a surface by face id.
+
+        Surfaces built from a parsed STEP model are named ``face_<id>`` (see
+        ``webapi.build_geometry_dicts``); a direct name match is also accepted.
+        Returns ``None`` if no such surface exists. This is the lookup the
+        Setup-tab's generated ``to_normal(model.face_by_id(...))`` relies on.
+        """
+        key = f"face_{fid}"
+        if key in self.surfaces:
+            return self.surfaces[key]
+        name = str(fid)
+        return self.surfaces.get(name)
+
+    def top_surface(self) -> Optional[Surface]:
+        """Return the surface whose origin sits highest in Z — a convenient
+        default target for orientation rules. ``None`` when there are none."""
+        if not self.surfaces:
+            return None
+        return max(
+            self.surfaces.values(),
+            key=lambda s: getattr(s, "_origin", Vector3()).z,
+        )
+
     def select_surfaces(self, tag: Optional[str] = None) -> List[Surface]:
         if tag and tag in self.tags:
             return [self.surfaces[n] for n in self.tags[tag] if n in self.surfaces]

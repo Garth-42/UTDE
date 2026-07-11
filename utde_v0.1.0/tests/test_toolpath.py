@@ -264,3 +264,40 @@ class TestToolpathCollection:
         col = ToolpathCollection("run1")
         col.add(make_line_toolpath(3))
         assert "run1" in repr(col)
+
+
+# ── ToolpathCollection concatenation (__add__ / __iadd__) ─────────────────────
+
+
+class TestCollectionConcatenation:
+    def _one_point_collection(self, x, name="c", layer=None):
+        col = ToolpathCollection(name=name)
+        col.add(Toolpath([make_point(x=x)], name=name), layer=layer)
+        return col
+
+    def test_iadd_appends_toolpaths(self):
+        # `combined += op` is exactly what the Setup-tab's generated script emits.
+        a = self._one_point_collection(0, name="a")
+        b = self._one_point_collection(10, name="b")
+        a += b
+        assert len(a.toolpaths) == 2
+        assert a.total_points() == 2
+
+    def test_add_returns_new_collection(self):
+        a = self._one_point_collection(0, name="a")
+        b = self._one_point_collection(10, name="b")
+        c = a + b
+        assert c is not a and c is not b
+        assert len(c.toolpaths) == 2
+        assert len(a.toolpaths) == 1   # operands unchanged
+
+    def test_iadd_merges_layers(self):
+        a = self._one_point_collection(0, name="a", layer=0)
+        b = self._one_point_collection(10, name="b", layer=1)
+        a += b
+        assert set(a.layers) == {0, 1}
+
+    def test_add_rejects_non_collection(self):
+        a = self._one_point_collection(0)
+        with pytest.raises(TypeError):
+            a + 5
