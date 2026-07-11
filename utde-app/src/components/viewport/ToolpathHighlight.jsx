@@ -16,6 +16,7 @@ export default function ToolpathHighlight() {
   const toolpaths = useToolpathStore((s) => s.toolpaths);
   const gcode = useToolpathStore((s) => s.gcode);
   const opRanges = useToolpathStore((s) => s.opRanges);
+  const pointLines = useToolpathStore((s) => s.pointLines);
   const selectedLine = useToolpathStore((s) => s.selectedLine);
 
   // Global point order = the op toolpaths concatenated (matches op_ranges).
@@ -24,8 +25,8 @@ export default function ToolpathHighlight() {
     [toolpaths]
   );
   const lineToPoint = useMemo(
-    () => buildLineToPointMap(gcode, opRanges),
-    [gcode, opRanges]
+    () => buildLineToPointMap(gcode, opRanges, pointLines),
+    [gcode, opRanges, pointLines]
   );
 
   // The "locate" marker is a Post-tab affordance only.

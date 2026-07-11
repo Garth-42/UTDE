@@ -115,3 +115,41 @@ describe("gcodeLineForPoint", () => {
     expect(gcodeLineForPoint([], GCODE, OP_RANGES, [0, 0, 0])).toBe(-1);
   });
 });
+
+// The post-processor supplies an exact point→line table (point_lines). It's
+// robust where the text heuristic isn't: modally-suppressed duplicate points
+// share the previous point's motion line, so there are fewer motion lines than
+// points and the "one line per point" assumption drifts.
+describe("explicit pointLines map", () => {
+  // 4 points; point 2 repeats point 1's position/feed so it emits no new line
+  // and shares line 2. Only 3 motion lines for 4 points.
+  const GCODE_DUP = [
+    "(--- OP 01 ---)", //   0
+    "G1 X0 Y0 Z0 F600", //  1 <- point 0
+    "G1 X10", //            2 <- points 1 and 2 (suppressed duplicate)
+    "G1 X20", //            3 <- point 3
+  ].join("\n");
+  const POINT_LINES = [1, 2, 2, 3];
+  const DUP_TPS = [{ points: [pt(0), pt(10), pt(10), pt(20)] }];
+
+  it("buildPointToLineMap returns the table verbatim", () => {
+    expect(buildPointToLineMap(GCODE_DUP, [], 4, POINT_LINES)).toEqual([1, 2, 2, 3]);
+  });
+
+  it("buildLineToPointMap inverts it — the point that moved owns the line", () => {
+    const map = buildLineToPointMap(GCODE_DUP, [], POINT_LINES);
+    expect(map[1]).toBe(0);
+    expect(map[2]).toBe(1); // not 2: the duplicate doesn't steal the line
+    expect(map[3]).toBe(3);
+  });
+
+  it("gcodeLineForPoint uses the explicit map", () => {
+    expect(gcodeLineForPoint(DUP_TPS, GCODE_DUP, [], [20, 0, 0], POINT_LINES)).toBe(3);
+    expect(gcodeLineForPoint(DUP_TPS, GCODE_DUP, [], [10, 0, 0], POINT_LINES)).toBe(2);
+  });
+
+  it("falls back to the heuristic when pointLines is empty/absent", () => {
+    expect(buildPointToLineMap(GCODE, OP_RANGES, 4, [])).toEqual([3, 4, 7, 8]);
+    expect(buildPointToLineMap(GCODE, OP_RANGES, 4, null)).toEqual([3, 4, 7, 8]);
+  });
+});

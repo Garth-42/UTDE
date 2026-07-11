@@ -117,6 +117,7 @@ export default function ToolpathLines() {
   const showNormals  = useToolpathStore((s) => s.showNormals);
   const gcode        = useToolpathStore((s) => s.gcode);
   const opRanges     = useToolpathStore((s) => s.opRanges);
+  const pointLines   = useToolpathStore((s) => s.pointLines);
   const setSelectedLine = useToolpathStore((s) => s.setSelectedLine);
   const tab          = useUiStore((s) => s.tab);
 
@@ -133,7 +134,7 @@ export default function ToolpathLines() {
     if (tab !== "post") return;
     e.stopPropagation();
     const line = gcodeLineForPoint(
-      toolpaths, gcode, opRanges, [e.point.x, e.point.y, e.point.z]
+      toolpaths, gcode, opRanges, [e.point.x, e.point.y, e.point.z], pointLines
     );
     if (line >= 0) setSelectedLine(line);
   };
