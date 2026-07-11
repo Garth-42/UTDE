@@ -5,6 +5,7 @@ functions directly with dicts so they also cover the browser/Pyodide path.
 """
 
 import math
+import re
 import pytest
 
 from toolpath_engine import webapi
@@ -97,6 +98,16 @@ class TestBuildGeometryDicts:
         surfaces, curves = webapi.build_geometry_dicts(
             [{"id": 1, "type": "cylinder", "params": {}}], [])
         assert surfaces == {}
+
+    def test_freeform_edge_becomes_curve(self):
+        # Regression: a bspline/generic edge (no line/circle params, has
+        # vertices) must become a polyline Curve — it used to be silently
+        # dropped by a call to a non-existent Curve.spline().
+        edge = {"id": 7, "type": "bspline", "params": {},
+                "vertices": [0, 0, 0, 1, 0, 0, 2, 1, 0, 3, 3, 0]}
+        _, curves = webapi.build_geometry_dicts([], [edge])
+        assert set(curves) == {7}
+        assert len(curves[7].points) == 4
 
 
 # ── resolve_machine ──────────────────────────────────────────────────────────
@@ -348,3 +359,55 @@ class TestCompileTimeline:
         # prusaslicer stub still produces a path even without a real binary
         assert "error" not in out
         assert len(out["op_ranges"]) == 1
+
+    def _two_pocket_ops(self):
+        op = lambda name: {"kind": "op", "templateId": "pocket", "name": name,
+                           "params": {"depth": 3.0, "stepdown": 1.0},
+                           "geometry": [[]], "visible": True}
+        return webapi.compile_timeline({"entries": [op("A"), op("B")],
+                                        "faces": [], "edges": []})
+
+    def test_multi_op_is_a_single_program(self):
+        # Regression for the per-op header/footer bug: a controller would halt
+        # after op 1 because each op emitted its own M30. Exactly one program.
+        out = self._two_pocket_ops()
+        g = out["gcode"]
+        assert len(out["op_ranges"]) == 2
+        assert g.count("M30") == 1
+        assert g.count("O1000") == 1
+        assert g.count("%") == 2          # one opening, one closing marker
+        assert "(--- OP 01" in g and "(--- OP 02" in g
+
+    def test_point_lines_aligns_with_points(self):
+        out = self._two_pocket_ops()
+        pl = out["point_lines"]
+        assert len(pl) == out["point_count"]
+        lines = out["gcode"].split("\n")
+        # Every mapped line is a real motion line carrying a coordinate.
+        for k in (0, len(pl) // 2, len(pl) - 1):
+            assert pl[k] >= 0
+            assert any(c in lines[pl[k]] for c in ("X", "Y", "Z"))
+
+    def test_five_axis_orientation_reaches_gcode(self):
+        # to_normal on a 5-axis machine must surface as an I/J/K tool vector,
+        # not be silently dropped (the output used to be pure X/Y/Z).
+        out = webapi.compile_timeline({
+            "entries": [{"kind": "op", "templateId": "ded-5axis-helical", "name": "weld",
+                         "params": {"helix_turns": 2}, "geometry": [], "visible": True}],
+            "faces": [], "edges": [], "machine": "gantry_5axis_ac",
+        })
+        g = out["gcode"]
+        assert re.search(r"\bI-?\d", g) and re.search(r"\bK-?\d", g)
+
+
+class TestGenerateToolpathOutput:
+    def test_orientation_reaches_gcode_on_rotary_machine(self):
+        out = webapi.generate_toolpath({
+            "edges": [{"id": 1, "type": "line",
+                       "params": {"start": [0, 0, 0], "end": [10, 0, 0]}}],
+            "strategy": {"strategy_type": "follow_curve"},
+            "orientation": [{"rule": "fixed", "i": 1, "j": 0, "k": 0}],
+            "machine": "gantry_5axis_ac",
+        })
+        # fixed(1,0,0) tool axis should appear as an I word (tool vector output).
+        assert re.search(r"\bI-?\d", out["gcode"])

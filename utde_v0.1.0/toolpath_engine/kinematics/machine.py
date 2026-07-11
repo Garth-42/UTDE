@@ -239,6 +239,14 @@ class Machine:
             solution[j.name] = result.x[i]
         return solution
 
+    def has_rotary_axes(self) -> bool:
+        """True if either chain contains a rotary joint (i.e. the machine can
+        change tool orientation — the signal for multi-axis output)."""
+        return any(
+            isinstance(j, Rotary)
+            for j in self.tool_chain.joints + self.workpiece_chain.joints
+        )
+
     def check_limits(self, joint_values: Dict[str, float]) -> List[str]:
         """Check if joint values are within limits. Returns list of violations."""
         violations = []
