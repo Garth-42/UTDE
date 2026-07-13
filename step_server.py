@@ -515,6 +515,56 @@ def templates():
     return jsonify(_webapi.list_templates())
 
 
+def _tessellate_step_file(path, deflection):
+    """Read the STEP file at ``path``, mesh it, and return the faces/edges JSON
+    dict. Raises ``ValueError`` if the STEP reader rejects the file.
+
+    Shared by the multipart-upload (``/parse-step``) and native-path
+    (``/parse-step-path``) endpoints so the tessellation loop lives in one place.
+    """
+    reader = STEPControl_Reader()
+    if reader.ReadFile(path) != IFSelect_RetDone:
+        raise ValueError("STEP parser failed — check file is valid STEP/STP")
+
+    for i in range(1, reader.NbRootsForTransfer() + 1):
+        reader.TransferRoot(i)
+    shape = reader.OneShape()
+    BRepMesh_IncrementalMesh(shape, deflection, False, deflection, False)
+
+    faces = []
+    face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+    face_idx = 0
+    while face_explorer.More():
+        data = tessellate_face(face_explorer.Current(), face_idx)
+        if data["vertices"]:
+            faces.append(data)
+        face_explorer.Next()
+        face_idx += 1
+
+    edges = []
+    edge_explorer = TopExp_Explorer(shape, TopAbs_EDGE)
+    edge_idx = 0
+    seen_edges = set()
+    while edge_explorer.More():
+        current = edge_explorer.Current()
+        # Deduplicate edges by hash (OpenCASCADE may visit shared edges twice).
+        edge_hash = hash(current)
+        if edge_hash not in seen_edges:
+            seen_edges.add(edge_hash)
+            data = tessellate_edge(current, edge_idx)
+            if data:
+                edges.append(data)
+            edge_idx += 1
+        edge_explorer.Next()
+
+    return {
+        "faces":      faces,
+        "edges":      edges,
+        "face_count": len(faces),
+        "edge_count": len(edges),
+    }
+
+
 @app.route("/parse-step", methods=["POST"])
 def parse_step():
     if not OCC_AVAILABLE:
@@ -542,56 +592,13 @@ def parse_step():
         tmp_path = tmp.name
 
     try:
-        reader = STEPControl_Reader()
-        if reader.ReadFile(tmp_path) != IFSelect_RetDone:
-            return jsonify({"error": "STEP parser failed — check file is valid STEP/STP"}), 400
-
         global _LAST_MODEL_PATH
         _LAST_MODEL_PATH = tmp_path
-
-        for i in range(1, reader.NbRootsForTransfer() + 1):
-            reader.TransferRoot(i)
-        shape = reader.OneShape()
-        BRepMesh_IncrementalMesh(shape, deflection, False, deflection, False)
-
-        # Faces
-        faces = []
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
-        face_idx = 0
-        while face_explorer.More():
-            data = tessellate_face(face_explorer.Current(), face_idx)
-            if data["vertices"]:
-                faces.append(data)
-            face_explorer.Next()
-            face_idx += 1
-
-        # Edges
-        edges = []
-        edge_explorer = TopExp_Explorer(shape, TopAbs_EDGE)
-        edge_idx = 0
-        seen_edges = set()
-        while edge_explorer.More():
-            current = edge_explorer.Current()
-            # Deduplicate edges by hash (OpenCASCADE may visit shared edges multiple times)
-            edge_hash = hash(current)
-            if edge_hash not in seen_edges:
-                seen_edges.add(edge_hash)
-                data = tessellate_edge(current, edge_idx)
-                if data:
-                    edges.append(data)
-                edge_idx += 1
-            edge_explorer.Next()
-
-        return jsonify({
-            "faces":      faces,
-            "edges":      edges,
-            "face_count": len(faces),
-            "edge_count": len(edges),
-        })
-
+        return jsonify(_tessellate_step_file(tmp_path, deflection))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Parse error: {str(e)}"}), 500
-
     finally:
         try:
             os.unlink(tmp_path)
@@ -789,52 +796,15 @@ def parse_step_from_path():
     deflection = max(0.01, min(5.0, deflection))
 
     try:
-        reader = STEPControl_Reader()
-        if reader.ReadFile(path) != IFSelect_RetDone:
-            return jsonify({"error": "STEP parser failed — check file is valid STEP/STP"}), 400
-
-        global _LAST_MODEL_PATH
-        _LAST_MODEL_PATH = path
-
-        for i in range(1, reader.NbRootsForTransfer() + 1):
-            reader.TransferRoot(i)
-        shape = reader.OneShape()
-        BRepMesh_IncrementalMesh(shape, deflection, False, deflection, False)
-
-        faces = []
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
-        face_idx = 0
-        while face_explorer.More():
-            data_face = tessellate_face(face_explorer.Current(), face_idx)
-            if data_face["vertices"]:
-                faces.append(data_face)
-            face_explorer.Next()
-            face_idx += 1
-
-        edges = []
-        edge_explorer = TopExp_Explorer(shape, TopAbs_EDGE)
-        edge_idx = 0
-        seen_edges = set()
-        while edge_explorer.More():
-            current = edge_explorer.Current()
-            edge_hash = hash(current)
-            if edge_hash not in seen_edges:
-                seen_edges.add(edge_hash)
-                data_edge = tessellate_edge(current, edge_idx)
-                if data_edge:
-                    edges.append(data_edge)
-                edge_idx += 1
-            edge_explorer.Next()
-
-        return jsonify({
-            "faces":      faces,
-            "edges":      edges,
-            "face_count": len(faces),
-            "edge_count": len(edges),
-        })
-
+        result = _tessellate_step_file(path, deflection)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Parse error: {str(e)}"}), 500
+
+    global _LAST_MODEL_PATH
+    _LAST_MODEL_PATH = path
+    return jsonify(result)
 
 
 # Standalone / Docker deployment: when UTDE_STATIC_DIR points at a built

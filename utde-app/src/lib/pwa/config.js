@@ -40,17 +40,31 @@ export const workbox = {
   // first STEP import and is runtime-cached below, so the initial visit stays
   // light while later visits work offline.
   globPatterns: ["**/*.{js,css,html,svg,whl,json,ico}"],
+  // Don't precache the (optional, large) self-hosted Pyodide runtime — it is
+  // runtime-cached below instead, so the precache manifest stays small.
+  globIgnores: ["**/pyodide/**"],
   // The toolpath_engine wheel + vendor chunks exceed the 2 MB default.
   maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
   cleanupOutdatedCaches: true,
   runtimeCaching: [
     {
-      // Pyodide + its packages load from jsdelivr.
+      // Pyodide + its packages when loaded from the jsdelivr CDN (default).
       urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/.*/i,
       handler: "CacheFirst",
       options: {
         cacheName: "utde-cdn",
         expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 30 },
+        cacheableResponse: { statuses: [0, 200] },
+      },
+    },
+    {
+      // Self-hosted Pyodide runtime (same-origin, when VITE_PYODIDE_INDEX_URL
+      // points at /pyodide/). CacheFirst so it works offline after first load.
+      urlPattern: /\/pyodide\/.*/i,
+      handler: "CacheFirst",
+      options: {
+        cacheName: "utde-pyodide",
+        expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
         cacheableResponse: { statuses: [0, 200] },
       },
     },

@@ -69,12 +69,31 @@ python -m pytest tests/test_server.py -v
 cd utde-app
 
 npm install
-npm run dev      # Dev server on http://localhost:3000 (proxies /api → localhost:5174)
+npm run dev      # Dev server on http://localhost:3000 (fully client-side; the
+                 # /api proxy is a legacy convenience — the app calls no server)
 npm run build    # Production build to dist/
 npm run preview  # Preview production build
-npm test         # Run all 90 Vitest tests
+npm test         # Run the Vitest suite
 npm run test:watch  # Vitest in watch mode
 ```
+
+#### Offline / self-hosting the Pyodide runtime
+
+By default Pyodide (+ numpy/scipy/pyyaml) loads from the jsDelivr CDN. For an
+offline / air-gapped / no-CDN build, self-host it:
+
+```bash
+cd utde-app
+npm run fetch-pyodide            # downloads core + needed packages → public/pyodide/ (gitignored)
+VITE_PYODIDE_INDEX_URL=/pyodide/ npm run build
+```
+
+The index URL is resolved in `lib/pyodide/client.js` (`resolveIndexUrl`); the
+fetch script (`scripts/fetch-pyodide.mjs`) uses `scripts/pyodideLock.mjs` to pull
+only the packages the worker loads plus their deps. The service worker
+runtime-caches `/pyodide/**` so later loads are offline. The boot no longer
+touches PyPI — `pyyaml` loads via `loadPackage` and the wheel installs with
+`deps=False`.
 
 ### Tauri Desktop App
 

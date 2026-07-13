@@ -1,0 +1,3 @@
+# Self-hosted Pyodide runtime, populated by `npm run fetch-pyodide`.
+# Large binary assets — fetched at build/deploy time, not committed.
+/public/pyodide/

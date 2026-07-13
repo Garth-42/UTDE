@@ -1,29 +1,14 @@
 /**
- * Resolves the base URL for the Python backend.
+ * Desktop (Tauri) shims.
  *
- * - In a Tauri desktop build: asks Rust for the dynamically assigned port
- *   that the Python sidecar is listening on.
- * - In browser dev mode (npm run dev): falls back to "/api" so the Vite
- *   proxy forwards requests to localhost:5174 as before.
+ * The app is fully client-side — the toolpath engine runs in Pyodide and STEP
+ * is parsed with opencascade.js — so nothing here makes HTTP calls to the Flask
+ * server anymore. What remains is Tauri-only: native file dialogs and a probe
+ * for the bundled Python sidecar's readiness (used by the splash screen). In a
+ * plain browser build every function below is a no-op / fallback.
  */
 
 export const IS_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-
-let _cachedBase = null;
-
-export async function getBaseUrl() {
-  if (_cachedBase) return _cachedBase;
-
-  if (!IS_TAURI) {
-    _cachedBase = "/api";
-    return _cachedBase;
-  }
-
-  const { invoke } = await import("@tauri-apps/api/core");
-  const port = await invoke("get_server_port");
-  _cachedBase = `http://127.0.0.1:${port}`;
-  return _cachedBase;
-}
 
 /**
  * Poll until the Python sidecar reports ready, then resolve.

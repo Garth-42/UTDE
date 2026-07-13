@@ -40,6 +40,20 @@ describe("PWA workbox config", () => {
     expect(rule).toBeTruthy();
     expect(rule.handler).toBe("CacheFirst");
   });
+
+  it("runtime-caches a self-hosted Pyodide runtime (same-origin /pyodide/)", () => {
+    const rule = workbox.runtimeCaching.find((r) =>
+      r.urlPattern.test("/pyodide/pyodide.asm.wasm")
+    );
+    expect(rule).toBeTruthy();
+    expect(rule.handler).toBe("CacheFirst");
+  });
+
+  it("keeps the self-hosted Pyodide runtime out of the precache manifest", () => {
+    expect(workbox.globIgnores).toEqual(
+      expect.arrayContaining([expect.stringMatching(/pyodide/)])
+    );
+  });
 });
 
 describe("pwaOptions", () => {

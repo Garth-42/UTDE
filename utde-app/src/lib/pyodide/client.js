@@ -13,7 +13,30 @@
 
 import { useRuntimeStore } from "../../store/runtimeStore";
 
-const DEFAULT_PYODIDE_INDEX = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+// Keep this version in sync with scripts/fetch-pyodide.mjs.
+const CDN_PYODIDE_INDEX = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+
+/**
+ * Where Pyodide (and its numpy/scipy/pyyaml packages) load from.
+ *
+ * Defaults to the jsDelivr CDN. Set `VITE_PYODIDE_INDEX_URL` to a self-hosted
+ * path (populated by `npm run fetch-pyodide`) for an offline / no-CDN build. A
+ * bare/relative value is resolved against the app's base path; an absolute URL
+ * or root-absolute path is used as-is. Always normalised to a trailing slash so
+ * the worker can append `pyodide.mjs`.
+ */
+export function resolveIndexUrl() {
+  const env = (typeof import.meta !== "undefined" && import.meta.env) || {};
+  const raw = env.VITE_PYODIDE_INDEX_URL;
+  if (!raw) return CDN_PYODIDE_INDEX;
+  let url = raw;
+  if (!/^https?:\/\//.test(url) && !url.startsWith("/")) {
+    url = (env.BASE_URL || "/") + url.replace(/^\.?\//, "");
+  }
+  return url.endsWith("/") ? url : url + "/";
+}
+
+const DEFAULT_PYODIDE_INDEX = resolveIndexUrl();
 
 export function createPyodideClient({ createWorker, pyodideIndexURL, wheelUrl } = {}) {
   let worker = null;

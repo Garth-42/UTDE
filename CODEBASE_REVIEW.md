@@ -309,20 +309,31 @@ actually run a timeline export end-to-end.
 
 ## 12. 🟠 Two backends, duplicated logic, and a hard CDN dependency
 
-- **Duplication.** `step_server.parse_step` and `parse_step_from_path` are ~50 lines
-  of near-identical tessellation-loop code; factor the shared body into one helper
-  (`_tessellate_shape(shape)`). The pure request logic is already nicely centralized
-  in `webapi.py` — the two parse handlers are the remaining copy.
-- **Two runtimes to keep in lockstep.** Flask server vs. in-browser Pyodide both call
-  `webapi`, which is good — but the Flask layer still carries endpoints
-  (`/generate-toolpath`, `/compile-timeline`) that the browser app no longer uses via
-  HTTP. Decide whether the Flask server is still a supported surface or just the Tauri
-  sidecar / dev tool, and prune accordingly.
-- **Runtime CDN dependency.** `pyodide/client.js` boots from
-  `https://cdn.jsdelivr.net/pyodide/v0.26.2/full/` and loads numpy/scipy from the
-  CDN. For an app that presents itself as client-side (and ships a PWA config), this
-  means no offline use and a third-party runtime dependency on every load. If offline
-  is a goal, self-host the Pyodide + wheel assets; if not, say so.
+- **Duplication — fixed.** `step_server.parse_step` / `parse_step_from_path` now
+  share one `_tessellate_step_file(path, deflection)` helper.
+- **Dead frontend HTTP plumbing — removed.** The app is fully client-side (Pyodide +
+  opencascade.js) and makes **no** HTTP calls to the Flask server — confirmed: the
+  only `getBaseUrl()` (the frontend's `/api` entry) was uncalled, and there is no
+  `fetch()` to the server anywhere. `getBaseUrl` is deleted and `backend.js` is now
+  documented as Tauri-only shims; the stale `.env.example` server URL is gone.
+- **Runtime CDN dependency — addressed (opt-in self-host).** `pyodide/client.js` now
+  resolves its index URL from `VITE_PYODIDE_INDEX_URL` (default: jsDelivr, so nothing
+  changes for existing dev). `npm run fetch-pyodide` (`scripts/fetch-pyodide.mjs` +
+  the tested `scripts/pyodideLock.mjs` resolver) populates a same-origin
+  `public/pyodide/` for offline/air-gapped builds, the SW runtime-caches `/pyodide/**`,
+  and the boot no longer touches PyPI (`pyyaml` via `loadPackage`, wheel installed
+  `deps=False`). See CLAUDE.md → "Offline / self-hosting the Pyodide runtime".
+
+**Still open (a deliberate product/decision, not done here):** the Flask server is now
+a *parallel* surface — nothing a user runs calls its endpoints (the browser and Tauri
+both run everything in Pyodide), yet it keeps 10 endpoints + 63 tests as the Docker /
+dev surface. And the **Tauri desktop path has drifted**: it spawns a Python sidecar the
+frontend never calls, `App.jsx` blocks the splash on `waitForServer()` for it, and the
+native-file import (`importStepViaTauri` → `parseStepByPath`) throws because parsing
+moved client-side. Retiring the sidecar (Rust `lib.rs` + the `build-sidecar`/`release`
+CI + PyInstaller) and rewiring native open to read bytes → client-side `parseStep`, or
+formally keeping the server as an optional deploy target, is the next call — it touches
+Rust/CI and changes the desktop product, so it's flagged rather than done unilaterally.
 
 ---
 
