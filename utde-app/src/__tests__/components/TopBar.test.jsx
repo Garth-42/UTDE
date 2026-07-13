@@ -9,8 +9,6 @@ vi.mock("../../lib/backend", () => ({
   IS_TAURI: false,
   openStepFileDialog: vi.fn(),
   saveGcodeDialog: vi.fn(),
-  getBaseUrl: vi.fn().mockResolvedValue("/api"),
-  waitForServer: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../lib/timelineCompiler", () => ({

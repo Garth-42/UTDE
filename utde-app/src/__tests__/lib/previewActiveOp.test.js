@@ -20,8 +20,6 @@ const POCKET = {
 
 vi.mock("../../lib/backend", () => ({
   IS_TAURI: false,
-  getBaseUrl: vi.fn().mockResolvedValue("/api"),
-  waitForServer: vi.fn(),
   openStepFileDialog: vi.fn(),
   saveGcodeDialog: vi.fn(),
 }));
