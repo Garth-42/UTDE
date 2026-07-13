@@ -137,8 +137,9 @@ def build_geometry_dicts(selected_faces, selected_edges):
         ftype = face.get("type")
         fid = face.get("id")
         try:
+            surf = None
             if ftype == "cylinder" and "center" in p and "radius" in p:
-                surfaces[fid] = Surface.cylinder(
+                surf = Surface.cylinder(
                     center=tuple(p["center"]),
                     axis=tuple(p.get("axis", [0, 0, 1])),
                     radius=p["radius"],
@@ -146,17 +147,31 @@ def build_geometry_dicts(selected_faces, selected_edges):
                     name=f"face_{fid}",
                 )
             elif ftype == "plane" and "origin" in p and "normal" in p:
-                surfaces[fid] = Surface.plane(
+                surf = Surface.plane(
                     origin=tuple(p["origin"]),
                     normal=tuple(p["normal"]),
                     name=f"face_{fid}",
                 )
             elif ftype == "sphere" and "center" in p and "radius" in p:
-                surfaces[fid] = Surface.sphere(
+                surf = Surface.sphere(
                     center=tuple(p["center"]),
                     radius=p["radius"],
                     name=f"face_{fid}",
                 )
+
+            # Fallback: any face with no analytic reconstruction (cone, torus,
+            # NURBS, 'other', or an analytic type missing its params) becomes a
+            # mesh-backed Surface from its tessellation, so surface-normal
+            # orientation (to_normal) works on it. Raster fill still needs a UV
+            # parameterisation and guards against mesh surfaces separately.
+            if surf is None:
+                verts = face.get("vertices")
+                idxs = face.get("indices")
+                if verts and idxs and len(verts) >= 9 and len(idxs) >= 3:
+                    surf = Surface.mesh(verts, idxs, name=f"face_{fid}")
+
+            if surf is not None:
+                surfaces[fid] = surf
         except Exception:
             pass
 
@@ -632,19 +647,45 @@ def compile_timeline(payload, machine_resolver=None, last_model_path=None):
         resolved = []
         first_surface = None
         entry_params = dict(entry.get("params", {}) or {})
+        real_pick_count = 0        # non-sentinel geometry picks on this op
+        resolved_count = 0         # how many of them became a Surface/Curve
+        unresolved_picks = []      # picked ids that couldn't be reconstructed
         for slot_picks in entry.get("geometry", []) or []:
             slot = []
             for gid in slot_picks:
                 if gid == "__model__":
                     if last_model_path:
                         entry_params.setdefault("_model_path", last_model_path)
-                elif gid in surfaces:
+                    continue
+                real_pick_count += 1
+                if gid in surfaces:
                     slot.append(surfaces[gid])
+                    resolved_count += 1
                     if first_surface is None:
                         first_surface = surfaces[gid]
                 elif gid in curves:
                     slot.append(curves[gid])
+                    resolved_count += 1
+                else:
+                    unresolved_picks.append(gid)
             resolved.append(slot)
+
+        # Don't let a picked-but-unresolvable face slip through: the templates
+        # fall back to a synthetic plane at the origin when a slot has no
+        # geometry, which would silently machine the wrong surface. Warn, and
+        # if NOTHING the user picked resolved, skip the op rather than run it on
+        # a placeholder.
+        if unresolved_picks:
+            tail = ("Skipping this op so it doesn't run on a placeholder surface."
+                    if resolved_count == 0
+                    else "Proceeding with the geometry that did resolve.")
+            warnings.append(
+                f"entry {idx} ({tpl_id}): picked geometry {unresolved_picks} "
+                f"could not be resolved to a usable surface/curve and was ignored. "
+                f"{tail}"
+            )
+            if resolved_count == 0:
+                continue
 
         try:
             op_collection = fn(

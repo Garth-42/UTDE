@@ -69,6 +69,19 @@ class TestToNormal:
         result = rule(pt, make_ctx())
         assert abs(result.i - 1.0) < 1e-3
 
+    def test_to_normal_on_mesh_surface(self):
+        # to_normal must work on a mesh-backed (freeform) face, not just the
+        # analytic primitives — this is what makes 5-axis orientation apply to
+        # imported CAD.
+        mesh = Surface.mesh(
+            [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0],   # +Z plane quad
+            [0, 1, 2, 0, 2, 3],
+            name="mesh_face",
+        )
+        rule = to_normal(mesh)
+        result = rule(make_pt(0.5, 0.5, 3), make_ctx())
+        assert result.k == pytest.approx(1.0, abs=1e-6)
+
 
 # ── lead / lag ────────────────────────────────────────────────────────────────
 

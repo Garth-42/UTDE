@@ -109,6 +109,19 @@ class TestBuildGeometryDicts:
         assert set(curves) == {7}
         assert len(curves[7].points) == 4
 
+    def test_freeform_face_becomes_mesh_surface(self):
+        # A cone/torus/NURBS face has no analytic params, but its tessellation
+        # must still yield a (mesh-backed) Surface so to_normal works on it —
+        # instead of being dropped and silently replaced by a synthetic plane.
+        face = {
+            "id": 3, "type": "cone", "params": {},
+            "vertices": [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0],
+            "indices": [0, 1, 2, 0, 2, 3],
+        }
+        surfaces, _ = webapi.build_geometry_dicts([face], [])
+        assert 3 in surfaces
+        assert surfaces[3].surface_type == "mesh"
+
 
 # ── resolve_machine ──────────────────────────────────────────────────────────
 
@@ -398,6 +411,33 @@ class TestCompileTimeline:
         })
         g = out["gcode"]
         assert re.search(r"\bI-?\d", g) and re.search(r"\bK-?\d", g)
+
+    def test_unresolved_picked_geometry_warns_and_skips(self):
+        # A picked face that can't be reconstructed must NOT silently fall back
+        # to a synthetic plane at the origin. Warn, and skip the op entirely
+        # when nothing the user picked resolved.
+        out = webapi.compile_timeline({
+            "entries": [{"kind": "op", "templateId": "raster_fill", "name": "Fill",
+                         "params": {}, "geometry": [[999]], "visible": True}],
+            "faces": [], "edges": [],
+        })
+        assert any("999" in w for w in out["warnings"])
+        assert out["op_ranges"] == []
+        assert out["point_count"] == 0
+
+    def test_partial_resolution_proceeds_with_warning(self):
+        # One good face + one bogus id: warn about the bogus one but still run
+        # the op on what resolved.
+        out = webapi.compile_timeline({
+            "entries": [{"kind": "op", "templateId": "raster_fill", "name": "Fill",
+                         "params": {"spacing": 5.0}, "geometry": [[1, 999]], "visible": True}],
+            "faces": [{"id": 1, "type": "plane",
+                       "params": {"origin": [0, 0, 0], "normal": [0, 0, 1]}}],
+            "edges": [],
+        })
+        assert any("999" in w for w in out["warnings"])
+        assert len(out["op_ranges"]) == 1
+        assert out["point_count"] > 0
 
 
 class TestGenerateToolpathOutput:

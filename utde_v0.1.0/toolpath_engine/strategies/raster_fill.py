@@ -336,6 +336,18 @@ class RasterFillStrategy(ToolpathStrategy):
         scallop_height: Optional[float] = None,
         **kwargs,
     ) -> ToolpathCollection:
+        # Raster fill sweeps in the surface's UV space, which a mesh-backed
+        # surface (cone/torus/NURBS face) does not have. Fail loudly rather than
+        # silently rastering across the mesh's placeholder plane. Surface-normal
+        # orientation still works on these faces; area fill needs a real UV
+        # parameterisation (planned — see CODEBASE_REVIEW.md "Step 2").
+        if surface is not None and getattr(surface, "surface_type", None) == "mesh":
+            raise ValueError(
+                "raster_fill does not support freeform/mesh faces yet — they have "
+                "no UV parameterisation. Use a plane, cylinder, or sphere face, or "
+                "use this face for orientation (to_normal) instead."
+            )
+
         # Resolve surface from boundary curves when no surface is provided
         if surface is None:
             curve_list = curves or ([boundary] if boundary else [])

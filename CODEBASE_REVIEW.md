@@ -32,9 +32,12 @@ suggested order, each with tests. Suite totals after the work: **413 Python**,
 | §10 | `/run-script` opt-in only, CORS restricted, docstring corrected | `step_server.py` |
 | §11 | `ToolpathCollection.__iadd__/__add__`, uniform template signatures, real `GeometryModel` lookups, template-registration import → the generated Python runs | `core/toolpath.py`, `core/geometry.py`, `templates/`, `lib/timelineToScript.js` |
 | §14 | Architecture section, store list, and dev commands realigned | `CLAUDE.md` |
+| §13 (Step 0) | Picked-but-unresolved geometry warns + skips (no phantom-plane path) | `webapi.compile_timeline` |
+| §13 (Step 1) | Mesh-backed `Surface` (KD-tree closest-point + normals) → `to_normal`/`pocket` work on freeform faces; `raster_fill` guards against mesh | `core/geometry.py`, `webapi.py`, `strategies/raster_fill.py` |
 
-Remaining as noted-only (larger efforts, not attempted here): §13 (mesh-backed
-`Surface` for real CAD faces), §12's deeper cleanup (prune unused Flask HTTP
+Remaining as noted-only (larger efforts, scheduled deliberately): §13 **Step 2**
+(kernel-sampled UV grid — unblocks area-fill on NURBS and fixes the normal sign;
+design note in the §13 section), §12's deeper cleanup (prune the unused Flask HTTP
 surface), the analytic-IK upgrade behind §8's warm-start, and the runtime CDN
 dependency in §12.
 
@@ -325,15 +328,43 @@ actually run a timeline export end-to-end.
 
 ## 13. 🟡 Geometry model is analytic-only; real CAD is meshes
 
-`core/geometry.Surface` supports plane/cylinder/sphere analytically;
-`closest_point`/`normal_at`/curvature are exact only for those. `build_geometry_dicts`
-only reconstructs plane/cylinder/sphere from STEP params — **cone, torus, and NURBS
-faces never become a usable `Surface`** (cones/tori are parsed but dropped here;
-generic surfaces would hit the 20×20 grid fallback in `closest_point`). For a CAD-fed
-toolpath tool this is the biggest medium-term gap: raster/normal strategies on a real
-freeform face won't have faithful geometry. Plan the mesh-backed `Surface`
-(BVH closest-point via `three-mesh-bvh` / `trimesh`, already named as targets) before
-leaning on curved-surface strategies.
+`core/geometry.Surface` supported plane/cylinder/sphere analytically;
+`build_geometry_dicts` only reconstructed those three from STEP params, so cone,
+torus, and NURBS faces never became a usable `Surface`. That produced two bad
+outcomes: a confusing *"requires a face"* error on the single-strategy path, and —
+worse — a **silent phantom-plane toolpath** on the timeline path, because the
+templates fall back to a synthetic 100 mm plane at the origin when a slot has no
+geometry. So picking a curved face machined an invisible flat plane with no signal.
+
+**Delivered here (Step 0 + Step 1):**
+
+- **Step 0 — no more silent wrong output.** `compile_timeline` now detects a
+  picked-but-unresolved geometry id, warns, and skips the op when nothing the user
+  picked resolved — instead of running it on a placeholder surface.
+- **Step 1 — mesh-backed `Surface`.** Any face without an analytic reconstruction
+  now becomes a `Surface.mesh(...)` from its tessellation. It implements
+  `closest_point` and `normal_at_closest` via a `scipy.spatial.cKDTree` over the
+  vertices plus an exact closest-point-on-triangle refine, with area-weighted,
+  barycentric-blended vertex normals. This makes **`to_normal` (and boundary-based
+  ops like `pocket`) work on freeform faces** — i.e. the §1 5-axis orientation now
+  applies to imported CAD, not just analytic primitives. `raster_fill` guards
+  against mesh surfaces (its UV sweep has no meaning on a mesh) and fails loudly.
+
+**Known caveat (drives Step 2):** the mesh normal's *sign* follows the tessellation
+winding. OCC winds forward faces outward, but a reversed face can yield an inward
+normal (tool axis into the material). It is geometrically correct up to sign.
+
+**Step 2 (not done — schedule deliberately): kernel-sampled UV grid.** To unblock
+`raster_fill`/area-fill on NURBS *and* fix the normal sign, sample each face's real
+`(u,v)` grid of `(position, normal)` from the OCC kernel at parse time and ship it
+alongside the mesh. `Surface.evaluate/normal_at` then bilinearly interpolate the
+grid, so the existing UV-based strategies work uniformly on every face type with no
+strategy rewrite, and normals come from the kernel (correct sign). Costs: larger
+per-face payload (make it adaptive to curvature) and interpolation error between
+samples. This is the right long-term shape and keeps the engine kernel-free — do it
+when area-fill on freeform faces is actually needed, not as a stopgap. Note:
+`three-mesh-bvh` is JS (viewport-side only); the Python/Pyodide engine relies on
+scipy, not `trimesh`, which isn't guaranteed in Pyodide.
 
 ---
 
