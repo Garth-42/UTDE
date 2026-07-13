@@ -1,0 +1,16 @@
+{
+  "name": "utde-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "type": "commonjs",
+  "description": "WebdriverIO + tauri-driver end-to-end smoke test for the UTDE desktop app.",
+  "scripts": {
+    "test": "wdio run ./wdio.conf.cjs"
+  },
+  "devDependencies": {
+    "@wdio/cli": "^9.0.0",
+    "@wdio/local-runner": "^9.0.0",
+    "@wdio/mocha-framework": "^9.0.0",
+    "@wdio/spec-reporter": "^9.0.0"
+  }
+}

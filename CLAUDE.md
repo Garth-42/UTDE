@@ -172,19 +172,13 @@ State managed with Zustand across six stores (`src/store/`):
 The 3D viewport (`components/viewport/`) uses React Three Fiber. Tab panels live
 in `components/setup/`, `components/post/`, and `components/simulate/`.
 
-**Browser vs Tauri branching**: `IS_TAURI = "__TAURI_INTERNALS__" in window` gates all desktop-specific code. `src/lib/backend.js` abstracts platform differences: `getBaseUrl()` calls `invoke("get_server_port")` in Tauri vs returns `/api` in browser; `openStepFileDialog()` / `saveGcodeDialog()` use native dialogs in Tauri vs browser fallbacks.
+**Browser vs Tauri branching**: `IS_TAURI = "__TAURI_INTERNALS__" in window` gates the desktop-only code. `src/lib/backend.js` holds the Tauri shims: `openStepFileDialog()` / `saveGcodeDialog()` (native dialogs) and `readStepFileBytes()` (native file read). Everything else is identical to the browser — there is no server branch.
 
 **4. Tauri Shell** (`src-tauri/`)
 
-The Rust `setup()` function in `src/lib.rs`:
-1. Binds a free TCP port (`TcpListener::bind("127.0.0.1:0")`)
-2. Spawns `binaries/utde-server` (PyInstaller bundle) with `--port` and `--no-cors` args
-3. Watches sidecar stdout for `UTDE_SERVER_READY` signal before marking server ready
-4. Exposes `get_server_port` and `get_server_status` Tauri commands to the frontend
+The desktop app is a **pure Pyodide webview** — the same client-side engine as the browser, wrapped in a native window. There is no Python sidecar. `src/lib.rs` just registers the log / dialog / fs plugins and hosts the bundled SPA (`tauri::generate_context!` embeds `../dist`). A natively-picked STEP file is read to bytes via the fs plugin (`readStepFileBytes`) and parsed client-side through the same `parseStep` (Pyodide + opencascade.js) — see `lib/stepImporter.js`.
 
-The frontend `App.jsx` calls `waitForServer()` on mount in Tauri mode and renders `<SplashScreen>` until the sidecar is ready. The `/parse-step-path` endpoint accepts a native file path directly (no multipart upload), used by `StepUpload.jsx` when `IS_TAURI=true`.
-
-CI workflows (`build-sidecar.yml`, `release.yml`) build the sidecar on all platforms via PyInstaller+conda, rename with target-triple suffix, and pass them to `tauri-apps/tauri-action`.
+CI: `.github/workflows/desktop.yml` compiles the Rust shell on every OS and runs a `tauri-driver` webview E2E on Linux (macOS is compile-only — WKWebView has no WebDriver, so its runtime check is a manual smoke test). `release.yml` builds the signed installers via `tauri-apps/tauri-action`. For a fully offline desktop build, bundle the self-hosted Pyodide (build with `VITE_PYODIDE_INDEX_URL=/pyodide/` after `npm run fetch-pyodide`).
 
 ## Design Principles
 

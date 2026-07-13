@@ -10,24 +10,17 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-sidecar:
-    # Re-run sidecar builds so release artifacts are always fresh
-    uses: ./.github/workflows/build-sidecar.yml
-
   release:
-    needs: build-sidecar
+    # The desktop app is a pure Pyodide webview — no Python sidecar to build or
+    # bundle — so this just compiles the Rust shell around the built SPA.
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            triple: x86_64-unknown-linux-gnu
           - os: windows-latest
-            triple: x86_64-pc-windows-msvc
-          - os: macos-latest
-            triple: x86_64-apple-darwin
-          - os: macos-latest
-            triple: aarch64-apple-darwin
+          - os: macos-latest   # Apple Silicon
+          - os: macos-13       # Intel
 
     runs-on: ${{ matrix.os }}
 
@@ -53,17 +46,6 @@ jobs:
       - name: Install frontend deps
         working-directory: utde-app
         run: npm ci
-
-      # Download the pre-built sidecar for this platform
-      - name: Download sidecar artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: sidecar-${{ matrix.triple }}
-          path: utde-app/src-tauri/binaries/
-
-      - name: Make sidecar executable (Unix)
-        if: runner.os != 'Windows'
-        run: chmod +x utde-app/src-tauri/binaries/utde-server-${{ matrix.triple }}
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
