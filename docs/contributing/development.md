@@ -84,7 +84,7 @@ curl http://localhost:5174/health
 
 ## Running as a Tauri desktop app
 
-The Tauri build bundles the React frontend with a Rust shell that spawns the Python backend as a sidecar process. This produces a signed native installer (`.deb`, `.exe`, `.dmg`, `.app`).
+The Tauri build wraps the React frontend in a native Rust shell. The app runs entirely client-side (Pyodide + opencascade.js) — there is **no Python sidecar** — so the shell only hosts the bundled SPA and exposes native file dialogs / reads. This produces a signed native installer (`.deb`, `.exe`, `.dmg`, `.app`).
 
 ### Prerequisites
 
@@ -109,9 +109,9 @@ sudo apt-get update && sudo apt-get install -y \
 cd utde-app && npx tauri dev
 ```
 
-Tauri starts the Vite dev server, spawns `step_server.py` directly via the Rust setup function, and opens the WebView. Changes to React files hot-reload (though HMR over WebSocket can be unreliable in WebKitGTK — restart if changes don't appear).
+Tauri starts the Vite dev server and opens the WebView — no Python process is spawned. Changes to React files hot-reload (though HMR over WebSocket can be unreliable in WebKitGTK — restart if changes don't appear).
 
-The Tauri dev build does **not** require a PyInstaller sidecar binary. It uses `python step_server.py --port <PORT>` directly, with the path resolved at compile time via `CARGO_MANIFEST_DIR`.
+A natively-picked STEP file is read to bytes via the fs plugin and parsed client-side through the same `parseStep` (Pyodide + opencascade.js) as the browser — see `lib/stepImporter.js`.
 
 ### VNC / noVNC desktop access
 
@@ -294,8 +294,7 @@ utde_v0.1.0/              Python library (pip-installable)
 
 tests/                    Flask server integration tests
 
-step_server.py            Flask API server (port 5174)
-step_server.spec          PyInstaller spec for sidecar bundle
+step_server.py            Flask API server (dev / Docker; the app runs client-side)
 
 utde-app/                 React + Vite frontend (port 3000)
   src/

@@ -14,6 +14,7 @@ export const useToolpathStore = create((set, get) => ({
   compileError: null,
   gcode:        "",
   opRanges:     [],
+  pointLines:   [],   // exact point→gcode-line map from the post-processor
   warnings:     [],
 
   // Post tab: gcode line ↔ toolpath preview sync (null = nothing selected)
@@ -29,7 +30,7 @@ export const useToolpathStore = create((set, get) => ({
   setCompiling:    (isCompiling)  => set({ isCompiling, compileError: isCompiling ? null : get().compileError }),
   setCompileError: (compileError) => set({ compileError }),
 
-  setCompileResult: ({ toolpaths, gcode, opRanges, warnings }) =>
+  setCompileResult: ({ toolpaths, gcode, opRanges, pointLines, warnings }) =>
     set(() => {
       const activeIds = new Set(toolpaths.map((t) => t.id));
       return {
@@ -37,6 +38,7 @@ export const useToolpathStore = create((set, get) => ({
         activeIds,
         gcode:    gcode || "",
         opRanges: opRanges || [],
+        pointLines: pointLines || [],
         warnings: warnings || [],
         compileError: null,
         selectedLine: null,   // clear any stale Post-tab selection
@@ -66,7 +68,7 @@ export const useToolpathStore = create((set, get) => ({
       return { activeIds };
     }),
 
-  clearToolpaths: () => set({ toolpaths: [], activeIds: new Set(), selectedLine: null }),
+  clearToolpaths: () => set({ toolpaths: [], activeIds: new Set(), pointLines: [], selectedLine: null }),
 
   setShowNormals: (v) => set({ showNormals: v }),
   setAnimProgress: (v) => set({ animProgress: v }),

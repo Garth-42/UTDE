@@ -17,7 +17,6 @@ import {
   generateToolpath,
   runScript,
   checkHealth,
-  parseStepByPath,
   lintScript,
 } from "../../api/client";
 
@@ -57,14 +56,6 @@ describe("parseStep", () => {
   it("propagates parser errors", async () => {
     rt.parseStep.mockRejectedValue(new Error("bad STEP"));
     await expect(parseStep(new File(["d"], "p.step"))).rejects.toThrow("bad STEP");
-  });
-});
-
-// ── parseStepByPath (unavailable in the browser build) ────────────────────────
-
-describe("parseStepByPath", () => {
-  it("throws a clear browser-build error", async () => {
-    await expect(parseStepByPath("/x.step")).rejects.toThrow(/not available in the browser build/);
   });
 });
 

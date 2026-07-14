@@ -1,16 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useUiStore } from "./store/uiStore";
 import { useStepStore } from "./store/stepStore";
 import { useOpsStore } from "./store/opsStore";
 import { loadSession } from "./utils/session";
-import { waitForServer, IS_TAURI } from "./lib/backend";
 
 import TopBar from "./components/TopBar";
 import StatusBar from "./components/StatusBar";
 import SetupTab from "./components/setup/SetupTab";
 import SimulateTab from "./components/simulate/SimulateTab";
 import PostTab from "./components/post/PostTab";
-import SplashScreen from "./components/SplashScreen";
 import ScriptOverlay from "./components/ScriptOverlay";
 import RuntimeStatus from "./components/RuntimeStatus";
 
@@ -27,16 +25,9 @@ const ROOT = {
 export default function App() {
   const tab = useUiStore((s) => s.tab);
 
-  const [serverReady, setServerReady] = useState(!IS_TAURI);
-  const [serverError, setServerError] = useState(null);
-
-  useEffect(() => {
-    if (!IS_TAURI) return;
-    waitForServer()
-      .then(() => setServerReady(true))
-      .catch((err) => setServerError(err.message));
-  }, []);
-
+  // The engine (Pyodide) loads lazily on first use with RuntimeStatus feedback —
+  // both in the browser and the desktop build — so there is nothing to wait on
+  // at startup.
   useEffect(() => {
     const session = loadSession();
     if (!session) return;
@@ -64,10 +55,6 @@ export default function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
-
-  if (!serverReady) {
-    return <SplashScreen message="Starting engine…" error={serverError} />;
-  }
 
   return (
     <div style={ROOT}>

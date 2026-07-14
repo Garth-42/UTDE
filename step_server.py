@@ -54,9 +54,36 @@ _LAST_MODEL_PATH = None
 
 
 def _apply_cors(flask_app):
-    """Apply CORS headers for development. Allows all origins (local server only)."""
-    if _CORS_AVAILABLE:
-        _CORS(flask_app, origins="*")
+    """Apply CORS headers for local development.
+
+    Defaults to the Vite dev origins only (``localhost:3000`` / ``127.0.0.1:3000``)
+    rather than ``*`` — with ``*`` any web page the developer visits could drive
+    this loopback server from their browser (and, combined with ``/run-script``,
+    execute code on their machine). Override with ``UTDE_CORS_ORIGINS``
+    (comma-separated origins, or the literal ``*`` to allow all — not advised).
+    """
+    if not _CORS_AVAILABLE:
+        return
+    raw = os.environ.get("UTDE_CORS_ORIGINS", "").strip()
+    if raw == "*":
+        origins = "*"
+    elif raw:
+        origins = [o.strip() for o in raw.split(",") if o.strip()]
+    else:
+        origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    _CORS(flask_app, origins=origins)
+
+
+def _run_script_enabled():
+    """True only when the operator explicitly opts in via ``UTDE_ENABLE_RUN_SCRIPT``.
+
+    ``/run-script`` executes arbitrary Python with the server's own privileges
+    (see its docstring) — it is process isolation, not a security sandbox — so it
+    is off by default. The browser build runs user scripts sandboxed in Pyodide.
+    """
+    return os.environ.get("UTDE_ENABLE_RUN_SCRIPT", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
 
 
 def _enable_static_serving(flask_app, static_dir):
@@ -488,6 +515,56 @@ def templates():
     return jsonify(_webapi.list_templates())
 
 
+def _tessellate_step_file(path, deflection):
+    """Read the STEP file at ``path``, mesh it, and return the faces/edges JSON
+    dict. Raises ``ValueError`` if the STEP reader rejects the file.
+
+    Shared by the multipart-upload (``/parse-step``) and native-path
+    (``/parse-step-path``) endpoints so the tessellation loop lives in one place.
+    """
+    reader = STEPControl_Reader()
+    if reader.ReadFile(path) != IFSelect_RetDone:
+        raise ValueError("STEP parser failed — check file is valid STEP/STP")
+
+    for i in range(1, reader.NbRootsForTransfer() + 1):
+        reader.TransferRoot(i)
+    shape = reader.OneShape()
+    BRepMesh_IncrementalMesh(shape, deflection, False, deflection, False)
+
+    faces = []
+    face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+    face_idx = 0
+    while face_explorer.More():
+        data = tessellate_face(face_explorer.Current(), face_idx)
+        if data["vertices"]:
+            faces.append(data)
+        face_explorer.Next()
+        face_idx += 1
+
+    edges = []
+    edge_explorer = TopExp_Explorer(shape, TopAbs_EDGE)
+    edge_idx = 0
+    seen_edges = set()
+    while edge_explorer.More():
+        current = edge_explorer.Current()
+        # Deduplicate edges by hash (OpenCASCADE may visit shared edges twice).
+        edge_hash = hash(current)
+        if edge_hash not in seen_edges:
+            seen_edges.add(edge_hash)
+            data = tessellate_edge(current, edge_idx)
+            if data:
+                edges.append(data)
+            edge_idx += 1
+        edge_explorer.Next()
+
+    return {
+        "faces":      faces,
+        "edges":      edges,
+        "face_count": len(faces),
+        "edge_count": len(edges),
+    }
+
+
 @app.route("/parse-step", methods=["POST"])
 def parse_step():
     if not OCC_AVAILABLE:
@@ -515,56 +592,13 @@ def parse_step():
         tmp_path = tmp.name
 
     try:
-        reader = STEPControl_Reader()
-        if reader.ReadFile(tmp_path) != IFSelect_RetDone:
-            return jsonify({"error": "STEP parser failed — check file is valid STEP/STP"}), 400
-
         global _LAST_MODEL_PATH
         _LAST_MODEL_PATH = tmp_path
-
-        for i in range(1, reader.NbRootsForTransfer() + 1):
-            reader.TransferRoot(i)
-        shape = reader.OneShape()
-        BRepMesh_IncrementalMesh(shape, deflection, False, deflection, False)
-
-        # Faces
-        faces = []
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
-        face_idx = 0
-        while face_explorer.More():
-            data = tessellate_face(face_explorer.Current(), face_idx)
-            if data["vertices"]:
-                faces.append(data)
-            face_explorer.Next()
-            face_idx += 1
-
-        # Edges
-        edges = []
-        edge_explorer = TopExp_Explorer(shape, TopAbs_EDGE)
-        edge_idx = 0
-        seen_edges = set()
-        while edge_explorer.More():
-            current = edge_explorer.Current()
-            # Deduplicate edges by hash (OpenCASCADE may visit shared edges multiple times)
-            edge_hash = hash(current)
-            if edge_hash not in seen_edges:
-                seen_edges.add(edge_hash)
-                data = tessellate_edge(current, edge_idx)
-                if data:
-                    edges.append(data)
-                edge_idx += 1
-            edge_explorer.Next()
-
-        return jsonify({
-            "faces":      faces,
-            "edges":      edges,
-            "face_count": len(faces),
-            "edge_count": len(edges),
-        })
-
+        return jsonify(_tessellate_step_file(tmp_path, deflection))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Parse error: {str(e)}"}), 500
-
     finally:
         try:
             os.unlink(tmp_path)
@@ -673,9 +707,24 @@ def lint_script():
 @app.route("/run-script", methods=["POST"])
 def run_script():
     """
-    Execute a UTDE Python script in a sandboxed subprocess.
+    Execute a UTDE Python script in an isolated subprocess (dedicated temp
+    working directory, wall-clock timeout). This is *process isolation, not a
+    security sandbox*: the child runs as the same user with full filesystem and
+    network access. It is therefore disabled unless ``UTDE_ENABLE_RUN_SCRIPT`` is
+    set, and should only be enabled on a trusted, loopback-bound dev server —
+    never on a public (``0.0.0.0``) bind. The browser build runs user scripts in
+    a real sandbox (Pyodide, the user's own tab) instead.
+
     Returns stdout, stderr, and G-code file contents if written.
     """
+    if not _run_script_enabled():
+        return jsonify({
+            "error": "Server-side script execution is disabled. It runs arbitrary "
+                     "Python with no sandbox; set UTDE_ENABLE_RUN_SCRIPT=1 on a "
+                     "trusted, loopback-only server to enable it. In the browser, "
+                     "scripts already run sandboxed in Pyodide.",
+        }), 403
+
     data = request.get_json(force=True)
     code = data.get("code", "")
 
@@ -747,52 +796,15 @@ def parse_step_from_path():
     deflection = max(0.01, min(5.0, deflection))
 
     try:
-        reader = STEPControl_Reader()
-        if reader.ReadFile(path) != IFSelect_RetDone:
-            return jsonify({"error": "STEP parser failed — check file is valid STEP/STP"}), 400
-
-        global _LAST_MODEL_PATH
-        _LAST_MODEL_PATH = path
-
-        for i in range(1, reader.NbRootsForTransfer() + 1):
-            reader.TransferRoot(i)
-        shape = reader.OneShape()
-        BRepMesh_IncrementalMesh(shape, deflection, False, deflection, False)
-
-        faces = []
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
-        face_idx = 0
-        while face_explorer.More():
-            data_face = tessellate_face(face_explorer.Current(), face_idx)
-            if data_face["vertices"]:
-                faces.append(data_face)
-            face_explorer.Next()
-            face_idx += 1
-
-        edges = []
-        edge_explorer = TopExp_Explorer(shape, TopAbs_EDGE)
-        edge_idx = 0
-        seen_edges = set()
-        while edge_explorer.More():
-            current = edge_explorer.Current()
-            edge_hash = hash(current)
-            if edge_hash not in seen_edges:
-                seen_edges.add(edge_hash)
-                data_edge = tessellate_edge(current, edge_idx)
-                if data_edge:
-                    edges.append(data_edge)
-                edge_idx += 1
-            edge_explorer.Next()
-
-        return jsonify({
-            "faces":      faces,
-            "edges":      edges,
-            "face_count": len(faces),
-            "edge_count": len(edges),
-        })
-
+        result = _tessellate_step_file(path, deflection)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Parse error: {str(e)}"}), 500
+
+    global _LAST_MODEL_PATH
+    _LAST_MODEL_PATH = path
+    return jsonify(result)
 
 
 # Standalone / Docker deployment: when UTDE_STATIC_DIR points at a built
@@ -829,6 +841,15 @@ if __name__ == "__main__":
 
     if not args.no_cors:
         _apply_cors(app)
+
+    if _run_script_enabled() and args.host not in ("127.0.0.1", "localhost", "::1"):
+        print(
+            f"WARNING: UTDE_ENABLE_RUN_SCRIPT is set and the server is bound to a "
+            f"non-loopback interface ({args.host}). /run-script executes arbitrary "
+            f"Python with no sandbox — this exposes remote code execution. Bind to "
+            f"127.0.0.1 or unset UTDE_ENABLE_RUN_SCRIPT.",
+            file=sys.stderr, flush=True,
+        )
 
     print(f"UTDE STEP Server → http://{args.host}:{args.port}")
     print(f"pythonocc-core: {'available' if OCC_AVAILABLE else 'NOT FOUND'}")

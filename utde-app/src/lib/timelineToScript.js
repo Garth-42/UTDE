@@ -101,6 +101,7 @@ export function timelineToScript(entries, options = {}) {
       "    fixed, lead, lag, side_tilt, avoid_collision, to_normal,",
       "    Machine, PostProcessor, ToolpathCollection,",
       ")",
+      "import toolpath_engine.templates  # register the built-in process templates",
       "",
       "# Load the model (replace with your STEP import in standalone use).",
       "model   = None",

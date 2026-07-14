@@ -736,7 +736,26 @@ class TestGenerateToolpath:
 # ── /run-script ───────────────────────────────────────────────────────────────
 
 
+class TestRunScriptDisabledByDefault:
+    def test_disabled_returns_403(self, client, monkeypatch):
+        # /run-script executes arbitrary Python with no sandbox, so it must be
+        # off unless the operator explicitly opts in.
+        monkeypatch.delenv("UTDE_ENABLE_RUN_SCRIPT", raising=False)
+        res = client.post(
+            "/run-script",
+            data=json.dumps({"code": "print('hi')"}),
+            content_type="application/json",
+        )
+        assert res.status_code == 403
+        assert "disabled" in json.loads(res.data)["error"].lower()
+
+
 class TestRunScript:
+    @pytest.fixture(autouse=True)
+    def _enable_run_script(self, monkeypatch):
+        # These exercise the runner itself, so opt in for the class.
+        monkeypatch.setenv("UTDE_ENABLE_RUN_SCRIPT", "1")
+
     def _post(self, client, code):
         return client.post(
             "/run-script",

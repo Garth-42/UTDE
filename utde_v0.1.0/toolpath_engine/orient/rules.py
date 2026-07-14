@@ -176,27 +176,38 @@ def avoid_collision(machine=None, max_tilt: float = 20.0) -> Callable:
 
     def rule(point: ToolpathPoint, context: Dict[str, Any]) -> Optional[Orientation]:
         tool_axis = point.orientation.vec
-        z_up = Vector3(0, 0, 1)
-        angle = tool_axis.angle_to(z_up)
+        up = Vector3(0, 0, 1)
+        ang_up = tool_axis.angle_to(up)
 
-        # If angle from Z exceeds max, clamp it
-        if angle > max_rad:
-            # Rotate tool axis toward Z by the excess
-            excess = angle - max_rad
-            rot_axis = tool_axis.cross(z_up).normalized()
-            if rot_axis.length() < 1e-9:
-                return None
-            cos_a = math.cos(excess)
-            sin_a = math.sin(excess)
-            k = rot_axis
-            v = tool_axis
-            clamped = (
-                v * cos_a
-                + k.cross(v) * sin_a
-                + k * (k.dot(v)) * (1 - cos_a)
-            )
-            return Orientation.from_vector(clamped)
-        return None  # no adjustment needed
+        # Measure tilt from the *nearest vertical pole*, not from +Z. The tool's
+        # home is vertical, but the sign convention varies: 3-axis / z_down tools
+        # point -Z while outward-normal orientations point +Z. Measuring only
+        # against +Z made a straight −Z tool read as ~180° of tilt and get
+        # violently flipped. min(ang_up, π−ang_up) treats either sign as a small
+        # tilt, and we clamp back toward whichever pole is closer.
+        if ang_up <= math.pi - ang_up:
+            pole, angle = up, ang_up
+        else:
+            pole, angle = Vector3(0, 0, -1), math.pi - ang_up
+
+        if angle <= max_rad:
+            return None  # within limit — no adjustment needed
+
+        # Rotate the tool axis back toward the nearest pole by the excess.
+        excess = angle - max_rad
+        rot_axis = tool_axis.cross(pole).normalized()
+        if rot_axis.length() < 1e-9:
+            return None
+        cos_a = math.cos(excess)
+        sin_a = math.sin(excess)
+        k = rot_axis
+        v = tool_axis
+        clamped = (
+            v * cos_a
+            + k.cross(v) * sin_a
+            + k * (k.dot(v)) * (1 - cos_a)
+        )
+        return Orientation.from_vector(clamped)
 
     rule.__name__ = f"avoid_collision(max_tilt={max_tilt}°)"
     return rule

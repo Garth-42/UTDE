@@ -1,13 +1,13 @@
 /**
  * Shared STEP-import helpers.
  *
- * Both the timeline scene-row editor and (formerly) the TopBar Import button
- * route through here so the parseStep / parseStepByPath plumbing has one
- * canonical implementation.
+ * Everything is parsed client-side (Pyodide + opencascade.js). The desktop
+ * (Tauri) path just reads the natively-picked file's bytes off disk and feeds
+ * them through the same `parseStep`, so there is one parsing path — no server.
  */
 
-import { parseStep, parseStepByPath } from "../api/client";
-import { openStepFileDialog, IS_TAURI } from "./backend";
+import { parseStep } from "../api/client";
+import { openStepFileDialog, readStepFileBytes, IS_TAURI } from "./backend";
 import { useStepStore } from "../store/stepStore";
 
 async function _runImport(promise, displayName) {
@@ -25,13 +25,15 @@ async function _runImport(promise, displayName) {
   }
 }
 
-/** Open the native dialog (Tauri only) and parse the chosen file. */
+/** Open the native dialog (Tauri only), read the file's bytes, and parse it
+ *  client-side — the same path a browser file input takes. */
 export async function importStepViaTauri() {
   if (!IS_TAURI) return null;
   const filePath = await openStepFileDialog();
   if (!filePath) return null;
   const displayName = String(filePath).split(/[/\\]/).pop();
-  return _runImport(parseStepByPath(filePath), displayName);
+  const bytes = await readStepFileBytes(filePath);
+  return _runImport(parseStep(bytes), displayName);
 }
 
 /** Parse a File object picked from a browser file input. */

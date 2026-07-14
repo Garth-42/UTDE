@@ -14,17 +14,6 @@ export async function parseStep(file, deflection = 0.5) {
   return runtime.parseStep(file, deflection); // { faces, edges, face_count, edge_count }
 }
 
-/**
- * Parse a STEP file by absolute path — a Tauri-only path that required the
- * Python sidecar. The static browser build parses File bytes directly, so this
- * is unavailable here.
- */
-export async function parseStepByPath() {
-  throw new Error(
-    "parseStepByPath is not available in the browser build — use parseStep(file)."
-  );
-}
-
 export async function generateToolpath({
   faces,
   edges,

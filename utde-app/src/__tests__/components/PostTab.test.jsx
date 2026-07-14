@@ -20,8 +20,6 @@ const saveGcodeDialog = vi.fn().mockResolvedValue("/tmp/out.nc");
 vi.mock("../../lib/backend", () => ({
   IS_TAURI: false,
   saveGcodeDialog: (...args) => saveGcodeDialog(...args),
-  getBaseUrl: vi.fn().mockResolvedValue("/api"),
-  waitForServer: vi.fn().mockResolvedValue(undefined),
   openStepFileDialog: vi.fn(),
 }));
 

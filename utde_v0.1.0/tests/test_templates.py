@@ -200,3 +200,34 @@ class TestPocketRuns:
         face = Surface.plane(origin=(0, 0, 0), size=200, name="picked_floor")
         result = get_process("pocket")(geometry=[[face]])
         assert any("picked_floor" in tp.name for tp in result.toolpaths)
+
+
+# ── Generated-script parity (the "one representation, two views" invariant) ───
+
+
+class TestGeneratedScriptRuns:
+    """The Setup-tab renders the timeline as Python; that Python must actually
+    run against the real API (uniform template signature, combined += op)."""
+
+    def test_uniform_template_signature(self):
+        # Every built-in template accepts (model, geometry, params) — the shape
+        # compile_timeline and the generated script both call.
+        import inspect
+        for meta in list_processes():
+            fn = get_process(meta["id"])
+            params = inspect.signature(fn).parameters
+            assert {"model", "geometry", "params"}.issubset(params), meta["id"]
+
+    def test_generated_shape_executes(self):
+        # Mirrors timelineToScript output for a pocket op + fixed orient.
+        from toolpath_engine import (
+            get_process, fixed, Machine, PostProcessor, ToolpathCollection,
+        )
+        combined = ToolpathCollection(name="timeline")
+        op = get_process("pocket")(model=None, geometry=[[]],
+                                   params={"depth": 3.0, "stepdown": 1.0})
+        op.orient(fixed(0, 0, -1))
+        combined += op
+        gcode = PostProcessor(Machine.gantry_5axis_ac()).process(combined, resolve_ik=False)
+        assert combined.total_points() > 0
+        assert "G1" in gcode

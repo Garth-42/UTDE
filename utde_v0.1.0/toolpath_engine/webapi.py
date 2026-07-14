@@ -137,8 +137,9 @@ def build_geometry_dicts(selected_faces, selected_edges):
         ftype = face.get("type")
         fid = face.get("id")
         try:
+            surf = None
             if ftype == "cylinder" and "center" in p and "radius" in p:
-                surfaces[fid] = Surface.cylinder(
+                surf = Surface.cylinder(
                     center=tuple(p["center"]),
                     axis=tuple(p.get("axis", [0, 0, 1])),
                     radius=p["radius"],
@@ -146,17 +147,31 @@ def build_geometry_dicts(selected_faces, selected_edges):
                     name=f"face_{fid}",
                 )
             elif ftype == "plane" and "origin" in p and "normal" in p:
-                surfaces[fid] = Surface.plane(
+                surf = Surface.plane(
                     origin=tuple(p["origin"]),
                     normal=tuple(p["normal"]),
                     name=f"face_{fid}",
                 )
             elif ftype == "sphere" and "center" in p and "radius" in p:
-                surfaces[fid] = Surface.sphere(
+                surf = Surface.sphere(
                     center=tuple(p["center"]),
                     radius=p["radius"],
                     name=f"face_{fid}",
                 )
+
+            # Fallback: any face with no analytic reconstruction (cone, torus,
+            # NURBS, 'other', or an analytic type missing its params) becomes a
+            # mesh-backed Surface from its tessellation, so surface-normal
+            # orientation (to_normal) works on it. Raster fill still needs a UV
+            # parameterisation and guards against mesh surfaces separately.
+            if surf is None:
+                verts = face.get("vertices")
+                idxs = face.get("indices")
+                if verts and idxs and len(verts) >= 9 and len(idxs) >= 3:
+                    surf = Surface.mesh(verts, idxs, name=f"face_{fid}")
+
+            if surf is not None:
+                surfaces[fid] = surf
         except Exception:
             pass
 
@@ -198,14 +213,17 @@ def build_geometry_dicts(selected_faces, selected_edges):
                     num_points=50,
                 )
             elif edge.get("vertices"):
+                # Any other edge type (bspline, bezier, ellipse, generic) arrives
+                # as a dense sampled polyline from the tessellator. Build the
+                # Curve straight from those points — do NOT call a NURBS fitter
+                # that doesn't exist here (a previous Curve.spline() call raised
+                # AttributeError, which the except below swallowed, silently
+                # dropping every freeform edge).
                 verts = edge["vertices"]
                 pts = [(verts[i], verts[i + 1], verts[i + 2])
                        for i in range(0, len(verts), 3)]
                 if len(pts) >= 2:
-                    curves[eid] = Curve.spline(
-                        control_points=pts,
-                        num_points=max(50, len(pts)),
-                    )
+                    curves[eid] = Curve.from_points(pts, name=f"edge_{eid}")
         except Exception:
             pass
 
@@ -422,7 +440,7 @@ def generate_toolpath(payload):
     )
     from toolpath_engine.orient import to_normal, fixed, lead, lag, avoid_collision
     from toolpath_engine.kinematics import Machine
-    from toolpath_engine.post import PostProcessor, DebugPostProcessor
+    from toolpath_engine.post import PostProcessor, PostConfig, DebugPostProcessor
 
     surfaces, curves = build_geometry_dicts(selected_faces, selected_edges)
 
@@ -531,7 +549,12 @@ def generate_toolpath(payload):
     else:
         machine_factory = getattr(Machine, machine_preset, Machine.gantry_5axis_ac)
         machine_obj = machine_factory()
-        post = PostProcessor(machine_obj)
+        # Emit the tool axis as an I/J/K vector on multi-axis machines so the
+        # orientation chain actually reaches the G-code (see compile_timeline).
+        post = PostProcessor(
+            machine_obj,
+            PostConfig(output_ijk=machine_obj.has_rotary_axes()),
+        )
         gcode = post.process(paths, resolve_ik=False)
         if workspace_origin:
             wcs_comment = (
@@ -582,7 +605,7 @@ def compile_timeline(payload, machine_resolver=None, last_model_path=None):
     from toolpath_engine.core.toolpath import ToolpathCollection
     from toolpath_engine.core.primitives import Vector3
     from toolpath_engine.kinematics import Machine
-    from toolpath_engine.post import PostProcessor
+    from toolpath_engine.post import PostProcessor, PostConfig
 
     templates_by_id = {t["id"]: t for t in list_processes()}
     surfaces, curves = build_geometry_dicts(selected_faces, selected_edges)
@@ -624,19 +647,45 @@ def compile_timeline(payload, machine_resolver=None, last_model_path=None):
         resolved = []
         first_surface = None
         entry_params = dict(entry.get("params", {}) or {})
+        real_pick_count = 0        # non-sentinel geometry picks on this op
+        resolved_count = 0         # how many of them became a Surface/Curve
+        unresolved_picks = []      # picked ids that couldn't be reconstructed
         for slot_picks in entry.get("geometry", []) or []:
             slot = []
             for gid in slot_picks:
                 if gid == "__model__":
                     if last_model_path:
                         entry_params.setdefault("_model_path", last_model_path)
-                elif gid in surfaces:
+                    continue
+                real_pick_count += 1
+                if gid in surfaces:
                     slot.append(surfaces[gid])
+                    resolved_count += 1
                     if first_surface is None:
                         first_surface = surfaces[gid]
                 elif gid in curves:
                     slot.append(curves[gid])
+                    resolved_count += 1
+                else:
+                    unresolved_picks.append(gid)
             resolved.append(slot)
+
+        # Don't let a picked-but-unresolvable face slip through: the templates
+        # fall back to a synthetic plane at the origin when a slot has no
+        # geometry, which would silently machine the wrong surface. Warn, and
+        # if NOTHING the user picked resolved, skip the op rather than run it on
+        # a placeholder.
+        if unresolved_picks:
+            tail = ("Skipping this op so it doesn't run on a placeholder surface."
+                    if resolved_count == 0
+                    else "Proceeding with the geometry that did resolve.")
+            warnings.append(
+                f"entry {idx} ({tpl_id}): picked geometry {unresolved_picks} "
+                f"could not be resolved to a usable surface/curve and was ignored. "
+                f"{tail}"
+            )
+            if resolved_count == 0:
+                continue
 
         try:
             op_collection = fn(
@@ -700,8 +749,14 @@ def compile_timeline(payload, machine_resolver=None, last_model_path=None):
                     pt.position.z - oz,
                 )
 
-    # Per-op G-code with section dividers and line-range tracking
-    post = PostProcessor(machine_obj)
+    # Per-op G-code as ONE program: a single header/footer around all ops, with
+    # a `(--- OP nn ---)` divider before each op body. Emitting a full program
+    # (header + M30 footer) per op would put a program-end after every op, so a
+    # controller would halt after op 1.
+    post = PostProcessor(
+        machine_obj,
+        PostConfig(output_ijk=machine_obj.has_rotary_axes()),
+    )
     gcode_lines = []
 
     op_idx_to_toolpaths = []
@@ -717,17 +772,33 @@ def compile_timeline(payload, machine_resolver=None, last_model_path=None):
             running += 1
         op_idx_to_toolpaths.append(chunk)
 
+    # One program header for the whole timeline.
+    gcode_lines.extend(post.program_header(combined).split("\n"))
+
+    # point_lines[k] = 0-based G-code line index that serialized point k renders
+    # on (or the last motion line for a modally-suppressed point). Point order
+    # matches the serialized `points` below: combined.toolpaths in order, which
+    # the op chunks partition in order.
+    point_lines = []
+
     for op_range, chunk in zip(op_ranges, op_idx_to_toolpaths):
         gcode_start = len(gcode_lines)
         divider = f"(--- OP {op_range['idx']+1:02d}  {op_range['name']} ---)"
         gcode_lines.append(divider)
         try:
-            sub_gcode = post.process(chunk, resolve_ik=False)
-            gcode_lines.extend(sub_gcode.split("\n"))
+            local_lines = []
+            body = post.process_body(chunk, resolve_ik=False, point_lines=local_lines)
+            offset = len(gcode_lines)
+            gcode_lines.extend(body.split("\n"))
+            for li in local_lines:
+                point_lines.append(offset + li if li >= 0 else -1)
         except Exception as exc:
             warnings.append(f"op {op_range['idx']} G-code: {exc}")
         op_range["gcode_start_line"] = gcode_start
         op_range["gcode_end_line"] = len(gcode_lines)
+
+    # One program footer for the whole timeline.
+    gcode_lines.extend(post.program_footer().split("\n"))
 
     gcode = "\n".join(gcode_lines)
 
@@ -749,5 +820,6 @@ def compile_timeline(payload, machine_resolver=None, last_model_path=None):
         "point_count": len(points),
         "gcode": gcode,
         "op_ranges": op_ranges,
+        "point_lines": point_lines,
         "warnings": warnings,
     }

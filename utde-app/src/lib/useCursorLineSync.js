@@ -18,14 +18,15 @@ export function useCursorLineSync() {
   const toolpaths = useToolpathStore((s) => s.toolpaths);
   const gcode = useToolpathStore((s) => s.gcode);
   const opRanges = useToolpathStore((s) => s.opRanges);
+  const pointLines = useToolpathStore((s) => s.pointLines);
   const animProgress = useToolpathStore((s) => s.animProgress);
   const isAnimating = useToolpathStore((s) => s.isAnimating);
   const setSelectedLine = useToolpathStore((s) => s.setSelectedLine);
 
   const total = totalPointCount(toolpaths);
   const pointToLine = useMemo(
-    () => buildPointToLineMap(gcode, opRanges, total),
-    [gcode, opRanges, total]
+    () => buildPointToLineMap(gcode, opRanges, total, pointLines),
+    [gcode, opRanges, total, pointLines]
   );
   const idx = cursorGlobalIndex(toolpaths, animProgress);
   const currentLine = idx >= 0 && idx < pointToLine.length ? pointToLine[idx] : -1;

@@ -69,6 +69,19 @@ class TestToNormal:
         result = rule(pt, make_ctx())
         assert abs(result.i - 1.0) < 1e-3
 
+    def test_to_normal_on_mesh_surface(self):
+        # to_normal must work on a mesh-backed (freeform) face, not just the
+        # analytic primitives — this is what makes 5-axis orientation apply to
+        # imported CAD.
+        mesh = Surface.mesh(
+            [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0],   # +Z plane quad
+            [0, 1, 2, 0, 2, 3],
+            name="mesh_face",
+        )
+        rule = to_normal(mesh)
+        result = rule(make_pt(0.5, 0.5, 3), make_ctx())
+        assert result.k == pytest.approx(1.0, abs=1e-6)
+
 
 # ── lead / lag ────────────────────────────────────────────────────────────────
 
@@ -198,3 +211,26 @@ class TestAvoidCollision:
     def test_rule_name_contains_max_tilt(self):
         rule = avoid_collision(max_tilt=20)
         assert "20" in rule.__name__
+
+    # Convention regression: tilt is measured from the *nearest vertical pole*,
+    # so a straight −Z (3-axis) tool reads 0° tilt, not ~180°.
+
+    def test_straight_down_tool_is_not_flipped(self):
+        rule = avoid_collision(max_tilt=20)
+        pt = make_pt(orient=Orientation(0, 0, -1))   # standard 3-axis home
+        assert rule(pt, make_ctx()) is None
+
+    def test_near_vertical_down_within_limit_returns_none(self):
+        rule = avoid_collision(max_tilt=20)
+        a = math.radians(6)
+        pt = make_pt(orient=Orientation(math.sin(a), 0, -math.cos(a)))
+        assert rule(pt, make_ctx()) is None
+
+    def test_over_tilted_down_tool_clamps_toward_down(self):
+        rule = avoid_collision(max_tilt=20)
+        a = math.radians(40)
+        pt = make_pt(orient=Orientation(math.sin(a), 0, -math.cos(a)))
+        result = rule(pt, make_ctx())
+        assert result is not None
+        tilt = math.degrees(result.vec.angle_to(Vector3(0, 0, -1)))
+        assert tilt == pytest.approx(20.0, abs=0.5)   # clamped to the limit, not flipped up

@@ -16,6 +16,62 @@ import numpy as np
 from .primitives import Vector3, Frame
 
 
+# --------------------------------------------------------------------------- #
+#  Mesh helpers (used by mesh-backed Surface)
+# --------------------------------------------------------------------------- #
+
+def _compute_vertex_normals(verts: np.ndarray, tris: np.ndarray) -> np.ndarray:
+    """Area-weighted per-vertex normals for a triangle mesh.
+
+    Each triangle contributes its (un-normalised) cross product — whose length
+    is proportional to twice its area — to each of its vertices, then the
+    accumulated vectors are normalised. Sign follows the triangle winding, which
+    the OCC tessellator emits consistently for a face.
+    """
+    vn = np.zeros_like(verts)
+    if len(tris) == 0:
+        return vn
+    a, b, c = verts[tris[:, 0]], verts[tris[:, 1]], verts[tris[:, 2]]
+    face_n = np.cross(b - a, c - a)          # length ∝ 2·area
+    for k in range(3):
+        np.add.at(vn, tris[:, k], face_n)
+    lens = np.linalg.norm(vn, axis=1, keepdims=True)
+    lens[lens < 1e-12] = 1.0
+    return vn / lens
+
+
+def _closest_point_on_triangle(p, a, b, c):
+    """Closest point on triangle (a,b,c) to point p, with its barycentric
+    weights (wa, wb, wc). Ericson, *Real-Time Collision Detection* §5.1.5."""
+    ab, ac, ap = b - a, c - a, p - a
+    d1, d2 = float(np.dot(ab, ap)), float(np.dot(ac, ap))
+    if d1 <= 0 and d2 <= 0:
+        return a, (1.0, 0.0, 0.0)
+    bp = p - b
+    d3, d4 = float(np.dot(ab, bp)), float(np.dot(ac, bp))
+    if d3 >= 0 and d4 <= d3:
+        return b, (0.0, 1.0, 0.0)
+    vc = d1 * d4 - d3 * d2
+    if vc <= 0 and d1 >= 0 and d3 <= 0:
+        v = d1 / (d1 - d3)
+        return a + v * ab, (1.0 - v, v, 0.0)
+    cp = p - c
+    d5, d6 = float(np.dot(ab, cp)), float(np.dot(ac, cp))
+    if d6 >= 0 and d5 <= d6:
+        return c, (0.0, 0.0, 1.0)
+    vb = d5 * d2 - d1 * d6
+    if vb <= 0 and d2 >= 0 and d6 <= 0:
+        w = d2 / (d2 - d6)
+        return a + w * ac, (1.0 - w, 0.0, w)
+    va = d3 * d6 - d5 * d4
+    if va <= 0 and (d4 - d3) >= 0 and (d5 - d6) >= 0:
+        w = (d4 - d3) / ((d4 - d3) + (d5 - d6))
+        return b + w * (c - b), (0.0, 1.0 - w, w)
+    denom = 1.0 / (va + vb + vc)
+    v, w = vb * denom, vc * denom
+    return a + ab * v + ac * w, (1.0 - v - w, v, w)
+
+
 @dataclass
 class Curve:
     """
@@ -200,6 +256,79 @@ class Surface:
             bounds=(0, 2 * math.pi, -math.pi / 2, math.pi / 2),
         )
 
+    @classmethod
+    def mesh(cls, vertices, faces, name="mesh", boundary_loop=None) -> "Surface":
+        """Build a mesh-backed surface from a triangulation.
+
+        ``vertices`` is a flat ``[x,y,z, ...]`` list or an ``(N,3)`` array;
+        ``faces`` is a flat ``[i,j,k, ...]`` list or an ``(M,3)`` array of
+        vertex indices. This is the fallback for CAD faces with no analytic
+        parameterisation (cone, torus, NURBS). It supports ``normal_at_closest``
+        and ``closest_point`` — enough for surface-normal orientation — but not
+        the ``evaluate(u,v)`` UV sweep that raster fill needs (a mesh has no
+        global UV; that's a separate parameterisation step).
+        """
+        verts = np.asarray(vertices, dtype=float).reshape(-1, 3)
+        tris = np.asarray(faces, dtype=int).reshape(-1, 3)
+        origin = Vector3(*verts.mean(axis=0)) if len(verts) else Vector3()
+        s = cls(
+            name=name,
+            surface_type="mesh",
+            _origin=origin,
+            _vertices=verts,
+            _faces=tris,
+            _normals=_compute_vertex_normals(verts, tris),
+        )
+        if boundary_loop is not None:
+            s.boundary_loop = boundary_loop
+        return s
+
+    def _ensure_mesh_index(self):
+        """Lazily build the KD-tree over vertices + a vertex→faces adjacency.
+
+        scipy is already a runtime dependency (IK) and is present in Pyodide, so
+        this works in both the server and the browser build.
+        """
+        if getattr(self, "_kdtree", None) is not None:
+            return
+        from scipy.spatial import cKDTree
+        self._kdtree = cKDTree(self._vertices)
+        adjacency = [[] for _ in range(len(self._vertices))]
+        for fi, tri in enumerate(self._faces):
+            for v in tri:
+                adjacency[int(v)].append(fi)
+        self._vertex_faces = adjacency
+
+    def _closest_on_mesh(self, q: np.ndarray):
+        """Return ``(face_index, closest_point, barycentric)`` for the mesh point
+        nearest ``q``, or ``None`` for an empty mesh.
+
+        KD-tree accelerated: gather the triangles incident to the k nearest
+        vertices and take the closest point over that candidate set. Exact for
+        reasonably uniform tessellations (what OCC emits).
+        """
+        if self._vertices is None or len(self._vertices) == 0 or len(self._faces) == 0:
+            return None
+        self._ensure_mesh_index()
+        k = min(8, len(self._vertices))
+        _, idxs = self._kdtree.query(q, k=k)
+        idxs = np.atleast_1d(idxs)
+        best = None
+        best_d2 = float("inf")
+        seen = set()
+        for vi in idxs:
+            for fi in self._vertex_faces[int(vi)]:
+                if fi in seen:
+                    continue
+                seen.add(fi)
+                tri = self._vertices[self._faces[fi]]
+                cp, bary = _closest_point_on_triangle(q, tri[0], tri[1], tri[2])
+                diff = cp - q
+                d2 = float(np.dot(diff, diff))
+                if d2 < best_d2:
+                    best_d2, best = d2, (fi, cp, bary)
+        return best
+
     def evaluate(self, u: float, v: float) -> Vector3:
         """Get position at parametric coordinates (u, v)."""
         if self.surface_type == "plane":
@@ -259,6 +388,16 @@ class Surface:
         type so that strategies can call this uniformly without branching on
         ``surface_type``.
         """
+        if self.surface_type == "mesh":
+            q = np.array([point.x, point.y, point.z])
+            res = self._closest_on_mesh(q)
+            if res is None:
+                return 0.0, 0.0, Vector3.from_array(self._origin.to_array())
+            _, cp, _bary = res
+            # A mesh has no global (u,v); the parametric coordinates are not
+            # meaningful here, so return placeholders with the true 3D point.
+            return 0.0, 0.0, Vector3(cp[0], cp[1], cp[2])
+
         if self.surface_type == "plane":
             diff = point - self._origin
             u = diff.dot(self._u_dir)
@@ -388,6 +527,18 @@ class Surface:
 
     def normal_at_closest(self, point: Vector3) -> Vector3:
         """Get surface normal at the point on the surface closest to the given point."""
+        if self.surface_type == "mesh":
+            q = np.array([point.x, point.y, point.z])
+            res = self._closest_on_mesh(q)
+            if res is None:
+                return self._normal
+            fi, _cp, bary = res
+            # Barycentric blend of the triangle's vertex normals — smooth across
+            # the face rather than faceted per triangle.
+            vns = self._normals[self._faces[fi]]
+            n = bary[0] * vns[0] + bary[1] * vns[1] + bary[2] * vns[2]
+            nv = Vector3(float(n[0]), float(n[1]), float(n[2]))
+            return nv.normalized() if nv.length() > 1e-12 else self._normal
         u, v, _ = self.closest_point(point)
         return self.normal_at(u, v)
 
@@ -425,6 +576,30 @@ class GeometryModel:
                 if tag not in self.tags:
                     self.tags[tag] = []
                 self.tags[tag].append(curve.name)
+
+    def face_by_id(self, fid) -> Optional[Surface]:
+        """Look up a surface by face id.
+
+        Surfaces built from a parsed STEP model are named ``face_<id>`` (see
+        ``webapi.build_geometry_dicts``); a direct name match is also accepted.
+        Returns ``None`` if no such surface exists. This is the lookup the
+        Setup-tab's generated ``to_normal(model.face_by_id(...))`` relies on.
+        """
+        key = f"face_{fid}"
+        if key in self.surfaces:
+            return self.surfaces[key]
+        name = str(fid)
+        return self.surfaces.get(name)
+
+    def top_surface(self) -> Optional[Surface]:
+        """Return the surface whose origin sits highest in Z — a convenient
+        default target for orientation rules. ``None`` when there are none."""
+        if not self.surfaces:
+            return None
+        return max(
+            self.surfaces.values(),
+            key=lambda s: getattr(s, "_origin", Vector3()).z,
+        )
 
     def select_surfaces(self, tag: Optional[str] = None) -> List[Surface]:
         if tag and tag in self.tags:

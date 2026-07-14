@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createPyodideClient } from "../../lib/pyodide/client";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { createPyodideClient, resolveIndexUrl } from "../../lib/pyodide/client";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -106,5 +106,30 @@ describe("createPyodideClient", () => {
     await tick();
     worker.onerror({ message: "worker exploded" });
     await expect(call).rejects.toThrow(/worker exploded/);
+  });
+});
+
+describe("resolveIndexUrl", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("defaults to the jsDelivr CDN when unset", () => {
+    vi.stubEnv("VITE_PYODIDE_INDEX_URL", "");
+    expect(resolveIndexUrl()).toMatch(/^https:\/\/cdn\.jsdelivr\.net\/pyodide\//);
+  });
+
+  it("uses a root-absolute self-hosted path as-is", () => {
+    vi.stubEnv("VITE_PYODIDE_INDEX_URL", "/pyodide/");
+    expect(resolveIndexUrl()).toBe("/pyodide/");
+  });
+
+  it("normalises a missing trailing slash", () => {
+    vi.stubEnv("VITE_PYODIDE_INDEX_URL", "/pyodide");
+    expect(resolveIndexUrl()).toBe("/pyodide/");
+  });
+
+  it("resolves a bare/relative value against the base path", () => {
+    vi.stubEnv("VITE_PYODIDE_INDEX_URL", "pyodide/");
+    vi.stubEnv("BASE_URL", "/UTDE/");
+    expect(resolveIndexUrl()).toBe("/UTDE/pyodide/");
   });
 });

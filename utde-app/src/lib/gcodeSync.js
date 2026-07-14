@@ -22,11 +22,29 @@ export function isMotionLine(line) {
 
 /**
  * Build a per-line → global-point-index map.
+ *
+ * When `pointLines` (the post-processor's exact point→line table) is supplied,
+ * it is inverted directly — robust against modally-suppressed duplicate points
+ * and setup/footer lines. Otherwise it falls back to the text heuristic of one
+ * motion line per point within each op range.
+ *
  * @returns {number[]} indexed by 0-based gcode line; -1 for non-motion lines.
  */
-export function buildLineToPointMap(gcode, opRanges) {
+export function buildLineToPointMap(gcode, opRanges, pointLines = null) {
   const lines = (gcode || "").split("\n");
   const map = new Array(lines.length).fill(-1);
+
+  if (Array.isArray(pointLines) && pointLines.length) {
+    // Exact map: point k renders on line pointLines[k]. Invert it; the first
+    // point that owns a line wins, so a suppressed duplicate (which shares the
+    // previous point's line) doesn't overwrite the point that actually moved.
+    for (let k = 0; k < pointLines.length; k++) {
+      const line = pointLines[k];
+      if (line >= 0 && line < map.length && map[line] === -1) map[line] = k;
+    }
+    return map;
+  }
+
   for (const r of opRanges || []) {
     const start = r.gcode_start_line;
     const end = r.gcode_end_line;
@@ -60,7 +78,16 @@ export function cursorGlobalIndex(toolpaths, progress) {
  * Useful for syncing the listing to a point/cursor.
  * @returns {number[]} indexed by global point index; -1 if unmapped.
  */
-export function buildPointToLineMap(gcode, opRanges, totalPoints = 0) {
+export function buildPointToLineMap(gcode, opRanges, totalPoints = 0, pointLines = null) {
+  if (Array.isArray(pointLines) && pointLines.length) {
+    // pointLines already IS the point→line table; normalise its length.
+    const n = totalPoints || pointLines.length;
+    const map = new Array(n).fill(-1);
+    for (let k = 0; k < n && k < pointLines.length; k++) {
+      map[k] = pointLines[k] >= 0 ? pointLines[k] : -1;
+    }
+    return map;
+  }
   const lineToPoint = buildLineToPointMap(gcode, opRanges);
   const map = new Array(totalPoints).fill(-1);
   for (let line = 0; line < lineToPoint.length; line++) {
@@ -98,9 +125,9 @@ export function nearestToolpathPointIndex(toolpaths, point) {
  * The G-code line for a 3D click on the toolpath: nearest point → its line.
  * Returns -1 when there's no toolpath or no mapped line.
  */
-export function gcodeLineForPoint(toolpaths, gcode, opRanges, point) {
+export function gcodeLineForPoint(toolpaths, gcode, opRanges, point, pointLines = null) {
   const idx = nearestToolpathPointIndex(toolpaths, point);
   if (idx < 0) return -1;
-  const rev = buildPointToLineMap(gcode, opRanges, totalPoints(toolpaths));
+  const rev = buildPointToLineMap(gcode, opRanges, totalPoints(toolpaths), pointLines);
   return idx < rev.length ? rev[idx] : -1;
 }

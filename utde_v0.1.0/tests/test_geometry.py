@@ -212,3 +212,100 @@ class TestGeometryModel:
     def test_repr(self):
         m = GeometryModel("mymodel")
         assert "mymodel" in repr(m)
+
+
+# ── GeometryModel lookups (used by the generated to_normal script) ────────────
+
+
+class TestGeometryModelLookups:
+    def test_face_by_id_matches_face_prefix(self):
+        m = GeometryModel()
+        m.add_surface(Surface.plane(name="face_7"))
+        assert m.face_by_id("7").name == "face_7"
+        assert m.face_by_id(7).name == "face_7"
+
+    def test_face_by_id_missing_returns_none(self):
+        assert GeometryModel().face_by_id("nope") is None
+
+    def test_top_surface_picks_highest_origin_z(self):
+        m = GeometryModel()
+        m.add_surface(Surface.plane(origin=(0, 0, 0), name="low"))
+        m.add_surface(Surface.plane(origin=(0, 0, 50), name="high"))
+        assert m.top_surface().name == "high"
+
+    def test_top_surface_empty_returns_none(self):
+        assert GeometryModel().top_surface() is None
+
+
+# ── Mesh-backed Surface (freeform CAD faces: cone / torus / NURBS) ────────────
+
+
+def _uv_sphere_mesh(radius=10.0, nlat=24, nlon=48):
+    """Vertices+faces for a UV sphere (outward-ish winding), for mesh tests."""
+    verts = []
+    for i in range(nlat + 1):
+        th = math.pi * i / nlat
+        for j in range(nlon):
+            ph = 2 * math.pi * j / nlon
+            verts += [radius * math.sin(th) * math.cos(ph),
+                      radius * math.sin(th) * math.sin(ph),
+                      radius * math.cos(th)]
+    vid = lambda i, j: i * nlon + (j % nlon)
+    faces = []
+    for i in range(nlat):
+        for j in range(nlon):
+            a, b, c, d = vid(i, j), vid(i, j + 1), vid(i + 1, j + 1), vid(i + 1, j)
+            faces += [a, b, c, a, c, d]
+    return verts, faces
+
+
+class TestMeshSurface:
+    def _plane_quad(self):
+        # +Z plane, CCW from above → outward normal is +Z.
+        return [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0], [0, 1, 2, 0, 2, 3]
+
+    def test_mesh_surface_type(self):
+        v, f = self._plane_quad()
+        assert Surface.mesh(v, f).surface_type == "mesh"
+
+    def test_plane_mesh_normal_is_exact(self):
+        v, f = self._plane_quad()
+        s = Surface.mesh(v, f)
+        n = s.normal_at_closest(Vector3(0.5, 0.5, 5))
+        assert n.z == pytest.approx(1.0, abs=1e-9)
+        assert abs(n.x) < 1e-9 and abs(n.y) < 1e-9
+
+    def test_closest_point_lands_on_mesh(self):
+        v, f = self._plane_quad()
+        s = Surface.mesh(v, f)
+        _, _, cp = s.closest_point(Vector3(0.5, 0.5, 5))
+        assert cp.x == pytest.approx(0.5) and cp.y == pytest.approx(0.5)
+        assert cp.z == pytest.approx(0.0, abs=1e-9)
+
+    def test_sphere_mesh_normal_is_radial(self):
+        # A tessellated sphere: the mesh normal must be radial (parallel to the
+        # query direction) up to sign — sign follows winding until kernel normals
+        # are shipped (Step 2).
+        v, f = _uv_sphere_mesh(radius=10.0)
+        s = Surface.mesh(v, f)
+        for q in (Vector3(20, 0, 0), Vector3(0, 0, 20), Vector3(7, 7, 7)):
+            n = s.normal_at_closest(q)
+            radial = q.normalized()
+            dot = n.x * radial.x + n.y * radial.y + n.z * radial.z
+            assert abs(dot) > 0.9   # radial (perpendicular to the surface)
+
+    def test_empty_mesh_is_safe(self):
+        s = Surface.mesh([], [])
+        # No crash; falls back rather than raising.
+        n = s.normal_at_closest(Vector3(0, 0, 1))
+        assert isinstance(n, Vector3)
+
+
+class TestMeshSurfaceRasterGuard:
+    def test_raster_fill_rejects_mesh_surface(self):
+        from toolpath_engine.strategies import RasterFillStrategy
+        v = [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0]
+        f = [0, 1, 2, 0, 2, 3]
+        mesh = Surface.mesh(v, f)
+        with pytest.raises(ValueError):
+            RasterFillStrategy().generate(surface=mesh)

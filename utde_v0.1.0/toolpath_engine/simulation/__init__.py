@@ -89,10 +89,13 @@ class CollisionChecker(SimulationPlugin):
         import math
         self._point_count += 1
 
-        # Check tool tilt angle
+        # Check tool tilt angle — measured from the nearest vertical pole so a
+        # straight −Z (3-axis) tool reads 0° tilt, not 180°. Without this a
+        # normal z_down toolpath would flag a collision at every point.
         z_up = Vector3(0, 0, 1)
         tool_axis = point.orientation.vec
-        angle_deg = math.degrees(tool_axis.angle_to(z_up))
+        ang_up = math.degrees(tool_axis.angle_to(z_up))
+        angle_deg = min(ang_up, 180.0 - ang_up)
 
         if angle_deg > self.max_tilt_deg:
             collision = {

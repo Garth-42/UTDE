@@ -57,7 +57,7 @@ export async function compileTimeline({ entriesOverride } = {}) {
     throw err;
   }
 
-  const { points = [], op_ranges = [], gcode = "", warnings = [] } = result;
+  const { points = [], op_ranges = [], gcode = "", point_lines = [], warnings = [] } = result;
 
   // Split the concatenated points back into per-op toolpath entries
   const perOp = op_ranges.map((r) => {
@@ -79,6 +79,7 @@ export async function compileTimeline({ entriesOverride } = {}) {
       toolpaths: perOp,
       gcode,
       opRanges:  op_ranges,
+      pointLines: point_lines,
       warnings,
     });
   } else {

@@ -47,18 +47,17 @@ This project runs inside a **VS Code Dev Container** (`.devcontainer/devcontaine
 # Install the Python library in editable mode
 pip install -e utde_v0.1.0/
 
-# Start the Flask API server (listens on http://localhost:5174)
-# IMPORTANT: must be running for browser dev mode (localhost:3000) to work.
-# The Vite proxy forwards /api → localhost:5174. The Tauri sidecar binds a
-# random port instead and does NOT serve the browser proxy — always start
-# this separately before opening localhost:3000.
+# Start the Flask API server (listens on http://localhost:5174).
+# NOTE: the browser dev build (localhost:3000) runs the engine client-side in
+# Pyodide and does NOT need this server. It's for the Tauri sidecar, the Docker
+# deployment, and as a dev/test convenience for the API endpoints.
 python step_server.py --reload   # --reload watches all .py files and restarts on change (dev only)
 
 # Run the full workflow example
 python utde_v0.1.0/toolpath_engine/examples/demo_5axis_ded.py
 
-# Run Python tests (library + server)
-cd /workspaces/files && python -m pytest utde_v0.1.0/tests/ tests/ -v
+# Run Python tests (library + server) — from the repo root
+python -m pytest utde_v0.1.0/tests/ tests/ -v
 
 # Run a single test file
 python -m pytest tests/test_server.py -v
@@ -70,12 +69,31 @@ python -m pytest tests/test_server.py -v
 cd utde-app
 
 npm install
-npm run dev      # Dev server on http://localhost:3000 (proxies /api → localhost:5174)
+npm run dev      # Dev server on http://localhost:3000 (fully client-side; the
+                 # /api proxy is a legacy convenience — the app calls no server)
 npm run build    # Production build to dist/
 npm run preview  # Preview production build
-npm test         # Run all 90 Vitest tests
+npm test         # Run the Vitest suite
 npm run test:watch  # Vitest in watch mode
 ```
+
+#### Offline / self-hosting the Pyodide runtime
+
+By default Pyodide (+ numpy/scipy/pyyaml) loads from the jsDelivr CDN. For an
+offline / air-gapped / no-CDN build, self-host it:
+
+```bash
+cd utde-app
+npm run fetch-pyodide            # downloads core + needed packages → public/pyodide/ (gitignored)
+VITE_PYODIDE_INDEX_URL=/pyodide/ npm run build
+```
+
+The index URL is resolved in `lib/pyodide/client.js` (`resolveIndexUrl`); the
+fetch script (`scripts/fetch-pyodide.mjs`) uses `scripts/pyodideLock.mjs` to pull
+only the packages the worker loads plus their deps. The service worker
+runtime-caches `/pyodide/**` so later loads are offline. The boot no longer
+touches PyPI — `pyyaml` loads via `loadPackage` and the wheel installs with
+`deps=False`.
 
 ### Tauri Desktop App
 
@@ -119,40 +137,48 @@ Data flows through a pipeline of composable components:
 - **Kinematics** (`kinematics/machine.py`): `Machine` defined as `Linear`/`Rotary` joint chains; IK solved via `scipy.optimize`
 - **Post-processor** (`post/processor.py`): Converts toolpaths to G-code
 
-**2. Flask API Server** (`step_server.py`)
+**2. Backend request logic** (`toolpath_engine/webapi.py` + `step_server.py`)
 
-Three main endpoints:
-- `POST /parse-step` — Tessellates uploaded STEP files using pythonocc → JSON (faces + edges)
-- `POST /generate-toolpath` — Receives strategy + orientation rule config, calls Python backend, returns toolpath points + G-code
-- `POST /run-script` — Executes arbitrary user Python code for custom workflows
+The request-handling *logic* lives in `webapi.py` as a pure, host-injected core:
+each function takes a request `dict` and returns a response `dict`, with no
+Flask/filesystem dependency. It is the single source of truth shared by two runners:
+
+- **In-browser (primary)**: the frontend runs `webapi` in **Pyodide** (a Web
+  Worker, `lib/pyodide/`), and parses STEP with **opencascade.js** (`lib/occt/`).
+  The browser build talks to no server — `api/client.js` delegates to `lib/runtime`.
+- **Flask server** (`step_server.py` — dev, Tauri sidecar, Docker): thin wrappers
+  that parse the HTTP request, call into `webapi`, and `jsonify` the result.
+  Endpoints: `/parse-step`, `/generate-toolpath`, `/compile-timeline`,
+  `/templates`, `/machines`, `/lint-script`, and `/run-script`. **`/run-script`
+  executes arbitrary Python and is disabled unless `UTDE_ENABLE_RUN_SCRIPT=1`** —
+  it is process isolation, not a security sandbox. (In the browser, scripts run
+  sandboxed in Pyodide.)
 
 **3. React Frontend** (`utde-app/src/`)
 
-Two-mode UI connected to Flask via `api/client.js`:
-- **STEP Import Mode**: Upload CAD file, inspect geometry, select faces/edges, set workspace origin
-- **Toolpath Mode**: Configure strategy & orientation rules, visualize paths, view generated Python/G-code
+A timeline-driven, **tabbed** UI (not a two-mode sidebar). The Setup tab authors
+an ordered timeline of op + orient + scene entries; Post shows the G-code with
+click-to-select line sync; Simulate plays the toolpath back. `api/client.js`
+delegates to the in-browser runtime, so the browser build needs no server.
 
-State managed with Zustand across four stores:
-- `stepStore` — Geometry, face/edge selection, workspace origin
-- `strategyStore` — Active strategy parameters + orientation rule chain
-- `toolpathStore` — Generated toolpath points
-- `uiStore` — Active mode and panel visibility
+State managed with Zustand across six stores (`src/store/`):
+- `stepStore` — parsed geometry, face/edge/vertex selection, workspace origin, workpiece transform, measure tool
+- `opsStore` — the timeline: ordered op / orient / scene entries + the active selection
+- `toolpathStore` — compiled toolpaths, G-code, op ranges, the `pointLines` map, and playback state
+- `machineStore` — the selected machine and session-imported machines
+- `runtimeStore` — Pyodide / OCCT runtime status
+- `uiStore` — active tab and panel visibility
 
-The 3D viewport (`components/viewport/`) uses React Three Fiber. The sidebar (`components/sidebar/`) renders panels contextually based on `uiStore` mode.
+The 3D viewport (`components/viewport/`) uses React Three Fiber. Tab panels live
+in `components/setup/`, `components/post/`, and `components/simulate/`.
 
-**Browser vs Tauri branching**: `IS_TAURI = "__TAURI_INTERNALS__" in window` gates all desktop-specific code. `src/lib/backend.js` abstracts platform differences: `getBaseUrl()` calls `invoke("get_server_port")` in Tauri vs returns `/api` in browser; `openStepFileDialog()` / `saveGcodeDialog()` use native dialogs in Tauri vs browser fallbacks.
+**Browser vs Tauri branching**: `IS_TAURI = "__TAURI_INTERNALS__" in window` gates the desktop-only code. `src/lib/backend.js` holds the Tauri shims: `openStepFileDialog()` / `saveGcodeDialog()` (native dialogs) and `readStepFileBytes()` (native file read). Everything else is identical to the browser — there is no server branch.
 
 **4. Tauri Shell** (`src-tauri/`)
 
-The Rust `setup()` function in `src/lib.rs`:
-1. Binds a free TCP port (`TcpListener::bind("127.0.0.1:0")`)
-2. Spawns `binaries/utde-server` (PyInstaller bundle) with `--port` and `--no-cors` args
-3. Watches sidecar stdout for `UTDE_SERVER_READY` signal before marking server ready
-4. Exposes `get_server_port` and `get_server_status` Tauri commands to the frontend
+The desktop app is a **pure Pyodide webview** — the same client-side engine as the browser, wrapped in a native window. There is no Python sidecar. `src/lib.rs` just registers the log / dialog / fs plugins and hosts the bundled SPA (`tauri::generate_context!` embeds `../dist`). A natively-picked STEP file is read to bytes via the fs plugin (`readStepFileBytes`) and parsed client-side through the same `parseStep` (Pyodide + opencascade.js) — see `lib/stepImporter.js`.
 
-The frontend `App.jsx` calls `waitForServer()` on mount in Tauri mode and renders `<SplashScreen>` until the sidecar is ready. The `/parse-step-path` endpoint accepts a native file path directly (no multipart upload), used by `StepUpload.jsx` when `IS_TAURI=true`.
-
-CI workflows (`build-sidecar.yml`, `release.yml`) build the sidecar on all platforms via PyInstaller+conda, rename with target-triple suffix, and pass them to `tauri-apps/tauri-action`.
+CI: `.github/workflows/desktop.yml` compiles the Rust shell on every OS and runs a `tauri-driver` webview E2E on Linux (macOS is compile-only — WKWebView has no WebDriver, so its runtime check is a manual smoke test). `release.yml` builds the signed installers via `tauri-apps/tauri-action`. For a fully offline desktop build, bundle the self-hosted Pyodide (build with `VITE_PYODIDE_INDEX_URL=/pyodide/` after `npm run fetch-pyodide`).
 
 ## Design Principles
 

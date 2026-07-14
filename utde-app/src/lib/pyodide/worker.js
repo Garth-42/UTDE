@@ -28,12 +28,18 @@ async function bootPyodide({ pyodideIndexURL, wheelUrl, packages }) {
   const pyodide = await loadPyodide({ indexURL: pyodideIndexURL });
 
   postMessage({ type: "progress", stage: "packages" });
-  await pyodide.loadPackage(["micropip", "numpy", "scipy", ...(packages || [])]);
+  // Load every runtime dependency from the Pyodide package repo at indexURL —
+  // including pyyaml — so nothing is fetched from PyPI at boot. When indexURL is
+  // a self-hosted mirror (see scripts/fetch-pyodide.mjs) the whole boot is
+  // offline-capable.
+  await pyodide.loadPackage(["micropip", "numpy", "scipy", "pyyaml", ...(packages || [])]);
 
   postMessage({ type: "progress", stage: "wheel" });
   const micropip = pyodide.pyimport("micropip");
-  await micropip.install("pyyaml");
-  if (wheelUrl) await micropip.install(wheelUrl);
+  // The wheel is served same-origin (public/wheels/…); its deps (numpy/scipy/
+  // pyyaml) are already loaded above, so install with deps=False to guarantee no
+  // PyPI round-trip. Args are positional: install(requirements, keep_going, deps).
+  if (wheelUrl) await micropip.install(wheelUrl, false, false);
 
   // A tiny Python dispatcher that turns (op, args-json) into a webapi call and
   // returns a JSON string. Keeping the JS↔Py boundary as JSON avoids proxy
