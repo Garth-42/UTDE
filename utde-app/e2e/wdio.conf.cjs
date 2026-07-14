@@ -10,13 +10,16 @@
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 
-// The compiled debug binary (Cargo [package] name = "app").
+// The compiled RELEASE binary (Cargo [package] name = "app"). Release is
+// required: a debug build loads the frontend from tauri.conf.json's `devUrl`
+// (localhost:3000), which isn't running in CI; the release build embeds the
+// bundled `dist/` assets instead.
 const application = path.resolve(
   __dirname,
   "..",
   "src-tauri",
   "target",
-  "debug",
+  "release",
   process.platform === "win32" ? "app.exe" : "app"
 );
 
