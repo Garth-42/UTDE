@@ -17,8 +17,10 @@ sudo apt-get install -y webkit2gtk-driver xvfb
 cargo install tauri-driver --locked
 
 cd utde-app
-npm ci && npm run build
-cargo build --manifest-path src-tauri/Cargo.toml   # debug binary → target/debug/app
+npm ci
+# Build via the Tauri CLI so the binary serves the embedded dist/ (a raw
+# `cargo build` loads devUrl / localhost:3000 instead). → target/release/app
+npx tauri build --no-bundle
 
 cd e2e
 npm install

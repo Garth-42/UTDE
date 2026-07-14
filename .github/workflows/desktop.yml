@@ -114,15 +114,17 @@ jobs:
         working-directory: utde-app
         run: npm run fetch-pyodide
 
-      - name: Build the desktop app (release) with self-hosted Pyodide
+      - name: Build the desktop app with self-hosted Pyodide
         working-directory: utde-app
         env:
           VITE_PYODIDE_INDEX_URL: /pyodide/
-        run: |
-          npm run build
-          # Release build: embeds the bundled dist/ assets. A debug build would
-          # load from devUrl (localhost:3000), which isn't running in CI.
-          cargo build --release --manifest-path src-tauri/Cargo.toml --locked
+        # Build via the Tauri CLI (not raw cargo): it enables the production
+        # asset-loading path so the binary serves the *embedded* dist/ over
+        # tauri://, instead of falling back to devUrl (localhost:3000, which
+        # isn't running in CI). --no-bundle skips installer packaging; the
+        # binary lands at src-tauri/target/release/app. beforeBuildCommand
+        # (npm run build) inherits VITE_PYODIDE_INDEX_URL from this step's env.
+        run: npx tauri build --no-bundle
 
       - name: Install E2E harness
         working-directory: utde-app/e2e
